@@ -60,7 +60,7 @@ Unconfirmed cards do not feed default retrospectives. Low-confidence cards are m
 
 - **Local-first:** Activity and assets are stored in SQLite under your OS user data directory.
 - **You confirm truth:** Auto-generated suggestions are not treated as final facts until you confirm them.
-- **Tiered consent (L0–L3):** Basic local capture vs. cloud structured data vs. enhanced summaries vs. per-project directory access—each with explicit boundaries. See [PRO5.0 doc](docs/PRO5.0-工作资产沉淀方案.md) (Chinese).
+- **Tiered consent (L0–L3):** Basic local capture vs. cloud structured data vs. enhanced summaries vs. per-project directory access—each with explicit boundaries.
 - **Optional cloud AI:** Requires your API key and consent; upload preview shows what would leave the device.
 - **We do not:** Team admin dashboards, default screen/audio recording, full-disk document indexing, or uploading raw window titles / full local paths.
 
