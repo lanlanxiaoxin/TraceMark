@@ -1,0 +1,28 @@
+node_modules/
+out/
+dist/
+dist-package/
+release/
+dist-electron/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+
+# Local product specs (not published to GitHub)
+docs/
+
+# Local AI / editor config
+.claude/settings.local.json
+.cursor/plans/
