@@ -1,0 +1,39 @@
+{
+  "name": "TraceMack",
+  "version": "0.1.0",
+  "description": "个人工作痕迹自动记账本",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "node scripts/dev.cjs electron-vite dev",
+    "build": "node scripts/dev.cjs electron-vite build",
+    "preview": "node scripts/dev.cjs electron-vite preview",
+    "postinstall": "electron-builder install-app-deps",
+    "prepackage": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pre-package.ps1",
+    "package": "node scripts/dev.cjs electron-vite build && npm run prepackage && electron-builder --config build/electron-builder.yml",
+    "package:dir": "node scripts/dev.cjs electron-vite build && npm run prepackage && electron-builder --config build/electron-builder.yml --dir",
+    "typecheck": "tsc -b --noEmit",
+    "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
+    "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
+    "check:utf8": "node scripts/check-utf8-ui.mjs",
+    "test": "node scripts/check-utf8-ui.mjs && node scripts/smoke-pro50.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.9.0",
+    "lucide-react": "^1.14.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.0",
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "cross-env": "^10.1.0",
+    "electron": "^30.0.0",
+    "electron-builder": "^25.0.0",
+    "electron-vite": "^5.0.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^5.7.0"
+  }
+}
