@@ -5,6 +5,7 @@ import { buildAiSafeSummary, type AiSafeActivitySummary } from './sanitizer'
 import { CATEGORY_LABELS, type ActivityCategory } from './window-title-parser'
 import { collectGitCommitsForProjects, loadAllGitDiffSnapshots, cleanupExpiredDiffSnapshots } from './enrichment/git-enrichment'
 import { canUseCloudAi } from './privacy-capabilities'
+import { normalizeAiReportContent } from './report-content'
 
 interface ResolvedAiConfig {
   baseUrl: string
@@ -604,11 +605,11 @@ export async function generateDailyReport(dateMs: number): Promise<GenerateRepor
   const prompt = template.replace('{{work_units}}', workUnitText)
 
   try {
-    const content = await callChatCompletion(
+    const raw = await callChatCompletion(
       prompt,
-      '你是专业的工作汇报助手，输出简洁的中文 Markdown 日报。'
+      '你是专业的工作汇报助手。输出简洁、可直接阅读的中文 Markdown 日报。禁止开场白，直接从 ## 标题开始。'
     )
-    return { content, mode: 'ai' }
+    return { content: normalizeAiReportContent(raw), mode: 'ai' }
   } catch (err) {
     return {
       content: offlineContent,
@@ -657,11 +658,11 @@ export async function generateWeeklyReport(weekStartMs: number): Promise<Generat
     .replace('{{git_summary}}', gitSummary || '（无 Git 记录）')
 
   try {
-    const content = await callChatCompletion(
+    const raw = await callChatCompletion(
       prompt,
-      '你是专业的工作汇报助手，输出简洁的中文 Markdown 周报。'
+      '你是专业的工作汇报助手。输出简洁、可直接阅读的中文 Markdown 周报。禁止开场白，直接从 ## 标题开始。'
     )
-    return { content, mode: 'ai' }
+    return { content: normalizeAiReportContent(raw), mode: 'ai' }
   } catch (err) {
     return {
       content: offlineContent,
