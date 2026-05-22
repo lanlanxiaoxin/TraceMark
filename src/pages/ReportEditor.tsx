@@ -10,6 +10,7 @@ import {
 import { dayBounds } from '@/lib/workAssets'
 import { buildActivityReportPreview } from '@/lib/uploadPreview'
 import { UploadPreviewDialog } from '@/components/UploadPreviewDialog'
+import { ReportMarkdownView } from '@/components/ReportMarkdownView'
 import type { UploadPreview } from '@/env'
 import type { ProjectsIntent } from '@/pages/Projects'
 
@@ -266,10 +267,8 @@ export function ReportEditor({
       </section>
 
       {content ? (
-        <article className="bg-white rounded-xl border border-gray-200 p-6 prose prose-sm max-w-none">
-          <pre className="whitespace-pre-wrap font-sans text-sm text-gray-800 leading-relaxed">
-            {content}
-          </pre>
+        <article className="bg-white rounded-xl border border-gray-200 p-6">
+          <ReportMarkdownView content={content} />
         </article>
       ) : (
         <div className="text-center py-16 space-y-3">
