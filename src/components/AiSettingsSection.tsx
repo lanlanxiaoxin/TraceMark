@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import {
   AI_PRESETS,
   resolveAiConfig,
@@ -15,6 +16,7 @@ export function AiSettingsSection({
   savingKey,
   updateSetting
 }: AiSettingsSectionProps): JSX.Element {
+  const { t } = useTranslation()
   const providerType = settings.ai_provider_type === 'custom' ? 'custom' : 'preset'
   const resolved = resolveAiConfig(settings)
   const configValid = isAiConfigValid(resolved)
@@ -22,14 +24,12 @@ export function AiSettingsSection({
   return (
     <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-gray-900">AI 模型</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          支持预设方案或自定义 OpenAI 兼容接口
-        </p>
+        <h2 className="text-lg font-semibold text-gray-900">{t('aiSettings.title')}</h2>
+        <p className="text-sm text-gray-500 mt-1">{t('aiSettings.subtitle')}</p>
       </div>
 
       <div>
-        <span className="block text-sm font-medium text-gray-700 mb-2">接入方式</span>
+        <span className="block text-sm font-medium text-gray-700 mb-2">{t('aiSettings.modeLabel')}</span>
         <div className="flex gap-2">
           <button
             type="button"
@@ -40,7 +40,7 @@ export function AiSettingsSection({
                 : 'border-gray-300 text-gray-600 hover:bg-gray-50'
             }`}
           >
-            预设方案
+            {t('aiSettings.preset')}
           </button>
           <button
             type="button"
@@ -51,7 +51,7 @@ export function AiSettingsSection({
                 : 'border-gray-300 text-gray-600 hover:bg-gray-50'
             }`}
           >
-            自定义接入
+            {t('aiSettings.custom')}
           </button>
         </div>
       </div>
@@ -60,7 +60,7 @@ export function AiSettingsSection({
         <div className="space-y-3">
           <div>
             <label htmlFor="ai-preset" className="block text-sm font-medium text-gray-700 mb-1">
-              预设模型
+              {t('aiSettings.presetModel')}
             </label>
             <select
               id="ai-preset"
@@ -101,9 +101,7 @@ export function AiSettingsSection({
               placeholder="https://api.example.com/v1"
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <p className="text-xs text-gray-400 mt-1">
-              OpenAI 兼容接口地址，如 OpenAI、Ollama、OneAPI 等
-            </p>
+            <p className="text-xs text-gray-400 mt-1">{t('aiSettings.customHint')}</p>
           </div>
           <div>
             <label htmlFor="ai-custom-model" className="block text-sm font-medium text-gray-700 mb-1">
@@ -131,12 +129,14 @@ export function AiSettingsSection({
             type="password"
             value={settings.api_key || ''}
             onChange={e => updateSetting('api_key', e.target.value)}
-            placeholder={providerType === 'custom' ? '自定义服务的 API Key' : '输入 API Key'}
+            placeholder={
+              providerType === 'custom' ? t('aiSettings.apiKeyPlaceholderCustom') : t('aiSettings.apiKeyPlaceholderPreset')
+            }
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           {savingKey === 'api_key' && (
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-blue-500">
-              保存中...
+              {t('common.saving')}
             </span>
           )}
         </div>
@@ -144,7 +144,7 @@ export function AiSettingsSection({
 
       {!configValid && providerType === 'custom' && (
         <p className="text-xs text-amber-600">
-          请填写有效的 Base URL 和 Model ID 后再生成报告
+          {t('aiSettings.invalidCustom')}
         </p>
       )}
 
@@ -156,10 +156,8 @@ export function AiSettingsSection({
           className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
         />
         <div>
-          <span className="text-sm font-medium text-gray-700">离线模式</span>
-          <p className="text-xs text-gray-500">
-            开启后不使用 AI 生成摘要，仅展示原始活动记录
-          </p>
+          <span className="text-sm font-medium text-gray-700">{t('aiSettings.offlineMode')}</span>
+          <p className="text-xs text-gray-500">{t('aiSettings.offlineHint')}</p>
         </div>
       </label>
     </section>

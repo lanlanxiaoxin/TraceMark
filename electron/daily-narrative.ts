@@ -3,6 +3,7 @@ import { dayBounds } from './work-asset-generator'
 import { CATEGORY_LABELS, type ActivityCategory } from './window-title-parser'
 import { sanitizeTextForCloud } from './sanitizer'
 import { callChatCompletion, shouldUseOfflineReport } from './ai-gateway'
+import { getReportLocale, reportSystemPrompt } from './report-prompts'
 
 function formatMins(ms: number): string {
   return `${Math.round(ms / 60000)} 分钟`
@@ -107,9 +108,6 @@ export function buildDailyNarrativePromptPayload(dateMs: number, limit = 120): s
   return parts.join('\n') || '（无活动）'
 }
 
-const NARRATIVE_AI_SYSTEM =
-  '你是专业的工作叙事助手。只根据用户提供的「规则叙事草稿」和「活动摘要」写作，不得编造未出现的项目、时长或工具。输出一段连贯中文（220–400 字），语气克制、适合向同事口述今日工作重点。'
-
 export async function generateDailyNarrativeAi(dateMs: number): Promise<{
   content: string
   mode: 'ai' | 'offline'
@@ -121,9 +119,12 @@ export async function generateDailyNarrativeAi(dateMs: number): Promise<{
     return { content: plain, mode: 'offline' }
   }
   const bullets = buildDailyNarrativePromptPayload(dateMs, 120)
-  const user = `请将下列「规则叙事草稿」润色为一段更自然的第一人称或中性叙述，并确保与「活动摘要」不矛盾。\n\n【规则叙事草稿】\n${plain}\n\n【活动摘要】\n${bullets}`
+  const user =
+    getReportLocale() === 'en'
+      ? `Polish the rule-based draft below into a natural first-person or neutral paragraph in English. It must not contradict the activity summary.\n\n【Rule-based draft】\n${plain}\n\n【Activity summary】\n${bullets}`
+      : `请将下列「规则叙事草稿」润色为一段更自然的第一人称或中性叙述，并确保与「活动摘要」不矛盾。\n\n【规则叙事草稿】\n${plain}\n\n【活动摘要】\n${bullets}`
   try {
-    const content = await callChatCompletion(user, NARRATIVE_AI_SYSTEM)
+    const content = await callChatCompletion(user, reportSystemPrompt('dailyNarrative'))
     return { content: content.trim(), mode: 'ai' }
   } catch (err) {
     return {

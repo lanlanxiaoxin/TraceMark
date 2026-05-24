@@ -1,17 +1,24 @@
 import { useState, useEffect, useCallback } from 'react'
-import { FileText, Loader2, Sparkles, Download, BookOpen } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { FileText, Loader2, Sparkles, Download, BookOpen, Image } from 'lucide-react'
 import {
   generateDailyReport,
   generateWeeklyReport,
   getReportForPeriod,
   startOfWeek,
-  exportMarkdown
+  exportMarkdown,
+  saveReportPng
 } from '@/lib/reports'
+import { renderReportSharePngDataUrl } from '@/lib/reportShareImage'
+import { getWeeklyMemoryCapsule } from '@/lib/weeklyMemoryCapsule'
+import { renderWeeklyMemoryCapsulePngDataUrl } from '@/lib/weeklyMemoryCapsuleImage'
+import { recordMetric } from '@/lib/metrics'
 import { dayBounds } from '@/lib/workAssets'
-import { buildActivityReportPreview } from '@/lib/uploadPreview'
+import { getDailySeal } from '@/lib/todaySeal'
+import { buildActivityReportPreview, buildSealDailyReportUploadPreview } from '@/lib/uploadPreview'
 import { UploadPreviewDialog } from '@/components/UploadPreviewDialog'
 import { ReportMarkdownView } from '@/components/ReportMarkdownView'
-import type { UploadPreview } from '@/env'
+import type { DailySealRecord, UploadPreview } from '@/env'
 import type { ProjectsIntent } from '@/pages/Projects'
 
 type ReportType = 'daily' | 'weekly'
@@ -19,6 +26,8 @@ type ReportType = 'daily' | 'weekly'
 export interface ReportEditorIntent {
   type?: ReportType
   dateMs?: number
+  /** 周五通知等场景：进入后自动触发生成 */
+  autoGenerate?: boolean
 }
 
 interface ReportEditorProps {
@@ -32,16 +41,22 @@ export function ReportEditor({
   onIntentConsumed,
   onOpenProjects
 }: ReportEditorProps = {}): JSX.Element {
+  const { t } = useTranslation()
   const [reportType, setReportType] = useState<ReportType>(intent?.type ?? 'daily')
   const [dateMs, setDateMs] = useState(() => intent?.dateMs ?? Date.now())
   const [content, setContent] = useState('')
   const [mode, setMode] = useState<'ai' | 'offline' | null>(null)
+  const [reportSource, setReportSource] = useState<'seal' | 'legacy' | 'battle' | null>(null)
+  const [reportVersion, setReportVersion] = useState<'v3' | 'v2' | 'battle-v3' | null>(null)
+  const [dailySeal, setDailySeal] = useState<DailySealRecord | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [degraded, setDegraded] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [exportingImage, setExportingImage] = useState(false)
   const [preview, setPreview] = useState<UploadPreview | null>(null)
   const [loadedFromHistory, setLoadedFromHistory] = useState(false)
+  const [pendingAutoGenerate, setPendingAutoGenerate] = useState(false)
 
   const reportPeriodBounds = useCallback((): { start: number; end: number } => {
     if (reportType === 'daily') {
@@ -58,23 +73,31 @@ export function ReportEditor({
 
   const loadSavedForSelection = useCallback(async () => {
     const { start, end } = reportPeriodBounds()
-    const report = await getReportForPeriod({
-      type: reportType,
-      dateStart: start,
-      dateEnd: end
-    })
+    const [report, seal] = await Promise.all([
+      getReportForPeriod({
+        type: reportType,
+        dateStart: start,
+        dateEnd: end
+      }),
+      reportType === 'daily' ? getDailySeal(dateMs) : Promise.resolve(null)
+    ])
+    setDailySeal(seal)
     if (report) {
       setContent(report.content)
       setMode(null)
+      setReportSource(null)
+      setReportVersion(null)
       setDegraded(null)
       setLoadedFromHistory(true)
     } else {
       setContent('')
       setMode(null)
+      setReportSource(null)
+      setReportVersion(null)
       setDegraded(null)
       setLoadedFromHistory(false)
     }
-  }, [reportType, reportPeriodBounds])
+  }, [reportType, reportPeriodBounds, dateMs])
 
   useEffect(() => {
     void loadSavedForSelection()
@@ -84,35 +107,39 @@ export function ReportEditor({
     if (!intent) return
     if (intent.type) setReportType(intent.type)
     if (intent.dateMs !== undefined) setDateMs(intent.dateMs)
-    if (intent.type || intent.dateMs !== undefined) onIntentConsumed?.()
+    if (intent.autoGenerate) setPendingAutoGenerate(true)
+    if (intent.type || intent.dateMs !== undefined || intent.autoGenerate) onIntentConsumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intent])
 
+  useEffect(() => {
+    if (!pendingAutoGenerate) return
+    setPendingAutoGenerate(false)
+    const timerId = window.setTimeout(() => void runGenerate(), 400)
+    return () => window.clearTimeout(timerId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAutoGenerate, reportType, dateMs])
+
   const openInRetro = (): void => {
     if (!onOpenProjects) return
-    if (reportType === 'daily') {
-      // 日报 → 包含该日的那一周复盘
-      onOpenProjects({
-        tab: 'retro',
-        retroType: 'weekly',
-        retroWeekStartMs: startOfWeek(dateMs)
-      })
-    } else {
-      onOpenProjects({
-        tab: 'retro',
-        retroType: 'weekly',
-        retroWeekStartMs: startOfWeek(dateMs)
-      })
-    }
+    onOpenProjects({
+      tab: 'retro',
+      retroType: 'weekly',
+      retroWeekStartMs: startOfWeek(dateMs)
+    })
   }
 
   const openPreview = async (): Promise<void> => {
     setError(null)
-    const range = reportPeriodBounds()
     try {
-      setPreview(await buildActivityReportPreview(range.start, range.end))
+      if (reportType === 'daily') {
+        setPreview(await buildSealDailyReportUploadPreview(dateMs))
+      } else {
+        const range = reportPeriodBounds()
+        setPreview(await buildActivityReportPreview(range.start, range.end))
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '无法加载上传预览')
+      setError(err instanceof Error ? err.message : t('dailyNarrative.errPreview'))
     }
   }
 
@@ -128,12 +155,14 @@ export function ReportEditor({
           : await generateWeeklyReport(startOfWeek(dateMs))
       setContent(result.content)
       setMode(result.mode)
+      setReportSource(result.source ?? null)
+      setReportVersion(result.reportVersion ?? null)
       setLoadedFromHistory(false)
       if (result.degradedFromAi && result.degradationReason) {
         setDegraded(result.degradationReason)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '生成失败')
+      setError(err instanceof Error ? err.message : t('common.errGenerate'))
     } finally {
       setLoading(false)
     }
@@ -141,11 +170,47 @@ export function ReportEditor({
 
   const handleExport = async (): Promise<void> => {
     setExporting(true)
-    const prefix = reportType === 'daily' ? '日报' : '周报'
+    const prefix = reportType === 'daily' ? t('reports.daily') : t('reports.weekly')
     const dateStr = new Date(dateMs).toISOString().slice(0, 10)
     const success = await exportMarkdown(content, `${prefix}-${dateStr}.md`)
     setExporting(false)
-    if (!success) return // user cancelled
+    if (!success) return
+    if (reportType === 'weekly') {
+      void recordMetric('weekly_battle_exported', { format: 'markdown' })
+    }
+  }
+
+  const handleExportImage = async (): Promise<void> => {
+    setExportingImage(true)
+    setError(null)
+    try {
+      const dateStr = new Date(dateMs).toISOString().slice(0, 10)
+      if (reportType === 'weekly') {
+        const capsule = await getWeeklyMemoryCapsule(startOfWeek(dateMs))
+        const dataUrl = renderWeeklyMemoryCapsulePngDataUrl(capsule)
+        if (!dataUrl) {
+          setError(t('reports.errCapsule'))
+          return
+        }
+        const success = await saveReportPng(dataUrl, t('reports.fileCapsule', { date: dateStr }))
+        if (success) {
+          void recordMetric('weekly_memory_capsule_exported', { weekStartMs: capsule.weekStartMs })
+          void recordMetric('weekly_battle_exported', { format: 'image' })
+        }
+        return
+      }
+      if (!content) return
+      const dataUrl = renderReportSharePngDataUrl(t('reports.shareTitleDaily'), content)
+      if (!dataUrl) {
+        setError(t('reports.errSharePng'))
+        return
+      }
+      await saveReportPng(dataUrl, t('reports.fileDaily', { date: dateStr }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('reports.errExportShare'))
+    } finally {
+      setExportingImage(false)
+    }
   }
 
   const dateInputValue = new Date(dateMs).toISOString().slice(0, 10)
@@ -154,27 +219,40 @@ export function ReportEditor({
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       <header className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">报告</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            基于原始活动时间轴的辅助报告（旧版）。主流程请使用「项目 → 复盘」基于已确认工作资产。
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('reports.title')}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t('reports.subtitle')}</p>
         </div>
         {onOpenProjects && (
           <button
             type="button"
             onClick={openInRetro}
             className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50"
-            title="在复盘中打开本周"
+            title={t('reports.openInRetroTitle')}
           >
             <BookOpen className="w-4 h-4" />
-            在复盘中打开本周
+            {t('reports.openInRetro')}
           </button>
         )}
       </header>
 
-      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        此为 <strong>活动日志驱动</strong> 的日报/周报。PRO5.0 推荐在「今日」确认资产后，于「项目 → 复盘」生成周复盘或阶段复盘。
-      </div>
+      {reportType === 'daily' && dailySeal && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          {t('reports.sealDone')}
+          {dailySeal.skippedMainline
+            ? t('reports.noMainline')
+            : dailySeal.projectName
+              ? t('reports.mainline', { name: dailySeal.projectName })
+              : ''}
+          {dailySeal.note.trim() ? ` · 「${dailySeal.note.trim().slice(0, 60)}」` : ''}
+          {t('reports.sealGenHint')}
+        </div>
+      )}
+
+      {reportType === 'daily' && !dailySeal && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {t('reports.noSealHint')}
+        </div>
+      )}
 
       <section className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
         <div className="flex gap-2">
@@ -187,7 +265,7 @@ export function ReportEditor({
                 : 'border-gray-300 text-gray-600 hover:bg-gray-50'
             }`}
           >
-            日报
+            {t('reports.daily')}
           </button>
           <button
             type="button"
@@ -198,14 +276,14 @@ export function ReportEditor({
                 : 'border-gray-300 text-gray-600 hover:bg-gray-50'
             }`}
           >
-            周报
+            {t('reports.weekly')}
           </button>
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label htmlFor="report-date" className="block text-sm font-medium text-gray-700 mb-1">
-              {reportType === 'daily' ? '日期' : '周起始日（周一）'}
+              {reportType === 'daily' ? t('reports.dateDaily') : t('reports.dateWeekly')}
             </label>
             <input
               id="report-date"
@@ -222,14 +300,27 @@ export function ReportEditor({
             type="button"
             onClick={() => void openPreview()}
             disabled={loading}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+          >
+            <Sparkles className="w-4 h-4" />
+            {t('reports.uploadPreview')}
+          </button>
+          <button
+            type="button"
+            onClick={() => void runGenerate()}
+            disabled={loading}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
           >
             {loading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <Sparkles className="w-4 h-4" />
+              <FileText className="w-4 h-4" />
             )}
-            {loading ? '生成中...' : '生成报告'}
+            {loading
+              ? t('common.generating')
+              : reportType === 'weekly'
+                ? t('reports.generateWeekly')
+                : t('reports.generateDaily')}
           </button>
           {content && (
             <button
@@ -239,24 +330,52 @@ export function ReportEditor({
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
             >
               <Download className="w-4 h-4" />
-              {exporting ? '导出中...' : '导出 Markdown'}
+              {exporting ? t('common.exporting') : t('reports.exportMarkdown')}
+            </button>
+          )}
+          {(reportType === 'weekly' || content) && (
+            <button
+              type="button"
+              onClick={() => void handleExportImage()}
+              disabled={exportingImage}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-800 text-sm font-medium hover:bg-indigo-100 disabled:opacity-50"
+            >
+              <Image className="w-4 h-4" aria-hidden />
+              {exportingImage
+                ? t('common.exporting')
+                : reportType === 'weekly'
+                  ? t('reports.exportCapsule')
+                  : t('reports.exportShare')}
             </button>
           )}
         </div>
 
         {loadedFromHistory && content && (
           <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
-            已加载该{reportType === 'daily' ? '日' : '周'}窗口内最近一次保存的报告；可点击「生成报告」覆盖为新草稿。
+            {t('reports.loadedDraft', {
+              period: reportType === 'daily' ? t('common.day') : t('common.week')
+            })}
           </p>
         )}
         {mode && (
           <p className="text-xs text-gray-500">
-            {mode === 'offline' && !degraded ? '离线模式：未调用 AI' : mode === 'ai' ? '已由 AI 生成并保存为草稿' : '已生成本地摘要并保存为草稿'}
+            {reportVersion === 'battle-v3' && reportSource === 'battle'
+              ? t('reports.badgeWeekly')
+              : reportVersion === 'v3' && reportSource === 'seal'
+                ? t('reports.badgeSealV3')
+                : reportSource === 'legacy'
+                  ? t('reports.badgeActivityV2')
+                  : ''}
+            {mode === 'offline' && !degraded
+              ? t('reports.badgeOffline')
+              : mode === 'ai'
+                ? t('reports.badgeAi')
+                : t('reports.badgeSaved')}
           </p>
         )}
         {degraded && (
           <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            云端 AI 不可用，已改用离线摘要：{degraded}
+            {t('reports.aiDegraded', { reason: degraded })}
           </p>
         )}
         {error && (
@@ -273,16 +392,14 @@ export function ReportEditor({
       ) : (
         <div className="text-center py-16 space-y-3">
           <FileText className="w-12 h-12 text-gray-300 mx-auto" />
-          <p className="text-gray-500">选择日期后点击「生成报告」</p>
-          <p className="text-xs text-gray-400">
-            请先在设置中配置 API Key，或开启离线模式查看结构化摘要
-          </p>
+          <p className="text-gray-500">{t('reports.emptyHint')}</p>
+          <p className="text-xs text-gray-400">{t('reports.emptyFootnote')}</p>
         </div>
       )}
 
       <UploadPreviewDialog
         preview={preview}
-        confirmLabel="确认并生成报告"
+        confirmLabel={t('reports.confirmGenerate')}
         onConfirm={() => void runGenerate()}
         onCancel={() => setPreview(null)}
         busy={loading}

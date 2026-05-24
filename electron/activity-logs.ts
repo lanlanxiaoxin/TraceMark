@@ -1,3 +1,4 @@
+import { syncActivityLogFts, deleteActivityLogFts } from './asset-search'
 import { getDb } from './database'
 import type { ActivityCategory } from './window-title-parser'
 
@@ -91,7 +92,10 @@ export function upsertActivitySnapshot(
       parsed.sanitizedTitle
     )
 
-  return Number(result.lastInsertRowid)
+  const id = Number(result.lastInsertRowid)
+  const row = db.prepare('SELECT * FROM activity_logs WHERE id = ?').get(id) as ActivityLogRow
+  syncActivityLogFts(row)
+  return id
 }
 
 export function updateActivityField(
@@ -101,6 +105,9 @@ export function updateActivityField(
 ): void {
   const db = getDb()
   db.prepare(`UPDATE activity_logs SET ${field} = ? WHERE id = ?`).run(value, id)
+  if (field === 'is_deleted' && value === 1) {
+    deleteActivityLogFts(id)
+  }
 }
 
 export function listActivityLogs(options: ListActivityLogsOptions = {}): {

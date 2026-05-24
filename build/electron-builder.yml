@@ -1,5 +1,5 @@
 appId: com.tracemark.app
-productName: TraceMack
+productName: TraceMark
 directories:
   buildResources: resources
   # 使用 release/ 避免与历史 dist/win-unpacked 文件锁冲突
@@ -32,8 +32,8 @@ nsis:
   language: '2052'
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: TraceMack
-  uninstallDisplayName: TraceMack
+  shortcutName: TraceMark
+  uninstallDisplayName: TraceMark
   runAfterFinish: true
 
 extraResources:

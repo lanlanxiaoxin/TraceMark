@@ -9,6 +9,12 @@ import { listActivityLogs } from './activity-logs'
 import { CATEGORY_LABELS, type ActivityCategory } from './window-title-parser'
 import { dayBounds } from './work-asset-generator'
 import { buildDailyNarrativePlain, buildDailyNarrativePromptPayload } from './daily-narrative'
+import { getDailySeal } from './daily-seal'
+import {
+  buildActivitySummaryForPrompt,
+  buildAssetsSectionForPrompt,
+  formatSealBlock
+} from './daily-report-v3'
 import { buildWeeklyContextPreviewSummary } from './weekly-report-builder'
 
 export interface UploadPreviewLine {
@@ -331,6 +337,39 @@ export async function buildActivityReportUploadPreview(
       { kind: 'info', text: `共 ${items.length} 条活动片段（最多展示 200 条）` }
     ],
     payloadSummary: payloadParts.join('\n') || '（无活动）',
+    canProceed: true,
+    requiresConsent: false
+  }
+}
+
+export async function buildSealDailyReportUploadPreview(dateMs: number): Promise<UploadPreview> {
+  const gate = checkCloudAiGate()
+  const seal = getDailySeal(dateMs)
+  const sealText = formatSealBlock(seal)
+
+  if (isOfflineMode() || !hasApiKey() || !canUseCloudAi()) {
+    return {
+      ...gate,
+      title: '盖章日报 — 生成方式',
+      payloadSummary: sealText
+    }
+  }
+
+  const activity = buildActivitySummaryForPrompt(dateMs).slice(0, 2500)
+  const assets = buildAssetsSectionForPrompt(dateMs).slice(0, 1800)
+
+  return {
+    title: '盖章日报 — AI 上传预览',
+    lines: [
+      ...gate.lines,
+      {
+        kind: 'info',
+        text: seal
+          ? '将发送今日盖章、活动摘要与已确认资产（v3 五段式），不含原始窗口标题。'
+          : '当日无盖章记录，生成时将使用活动日志版日报。'
+      }
+    ],
+    payloadSummary: `${sealText}\n\n${activity}\n\n${assets}`,
     canProceed: true,
     requiresConsent: false
   }

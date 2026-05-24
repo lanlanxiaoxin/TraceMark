@@ -1,4 +1,4 @@
-import { loadPromptFile } from './prompt-path'
+import { loadLocalizedPrompt } from './report-prompts'
 import {
   formatDailySlicesForPrompt,
   loadDailySlicesForWeek,
@@ -121,6 +121,6 @@ export async function buildWeeklyContextPreviewSummary(weekStartMs: number): Pro
 }
 
 export function loadWeeklyReportPrompt(contextText: string): string {
-  const template = loadPromptFile('weekly-report-v3.md')
+  const template = loadLocalizedPrompt('weekly-report-v3.md')
   return template.replace('{{weekly_context}}', contextText)
 }

@@ -1,3 +1,4 @@
+import { deleteWorkAssetFts, syncWorkAssetFts } from './asset-search'
 import { getDb } from './database'
 
 export type AssetKind = 'outcome' | 'process' | 'evidence'
@@ -137,7 +138,9 @@ export function createWorkAsset(input: CreateWorkAssetInput): WorkAsset {
       now,
       now
     )
-  return getWorkAsset(Number(result.lastInsertRowid))!
+  const created = getWorkAsset(Number(result.lastInsertRowid))!
+  syncWorkAssetFts(created)
+  return created
 }
 
 export function getWorkAsset(id: number): WorkAsset | null {
@@ -270,7 +273,9 @@ export function updateWorkAsset(id: number, patch: UpdateWorkAssetPatch): WorkAs
     now,
     id
   )
-  return getWorkAsset(id)
+  const updated = getWorkAsset(id)
+  if (updated) syncWorkAssetFts(updated)
+  return updated
 }
 
 export function countWorkAssetsByProject(projectId: number): number {
@@ -284,6 +289,7 @@ export function countWorkAssetsByProject(projectId: number): number {
 export function deleteWorkAsset(id: number): boolean {
   const db = getDb()
   const result = db.prepare('DELETE FROM work_assets WHERE id = ?').run(id)
+  if (result.changes > 0) deleteWorkAssetFts(id)
   return result.changes > 0
 }
 

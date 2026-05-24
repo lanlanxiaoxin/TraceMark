@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { getPrivacyConsent, setPrivacyConsent, PRIVACY_CAPABILITIES } from '@/lib/privacy'
 
 interface PrivacyConsentPanelProps {
@@ -12,29 +13,25 @@ export function PrivacyConsentPanel({
   projectId = null,
   compact = false
 }: PrivacyConsentPanelProps): JSX.Element {
+  const { t } = useTranslation()
   const scopeId = scopeType === 'project' && projectId != null ? String(projectId) : null
-  const [l1, setL1] = useState(false)
-  const [l2, setL2] = useState(false)
-  const [l3, setL3] = useState(false)
+  const [basic, setBasic] = useState(false)
+  const [enhanced, setEnhanced] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [a, b, c] = await Promise.all([
+      const [a, b] = await Promise.all([
         getPrivacyConsent(scopeType, scopeId, PRIVACY_CAPABILITIES.L1_CLOUD),
-        getPrivacyConsent(scopeType, scopeId, PRIVACY_CAPABILITIES.L2_ENHANCED),
-        projectId != null
-          ? getPrivacyConsent('project', String(projectId), PRIVACY_CAPABILITIES.L3_PROJECT_DIR)
-          : Promise.resolve(null)
+        getPrivacyConsent(scopeType, scopeId, PRIVACY_CAPABILITIES.L2_ENHANCED)
       ])
-      setL1(a?.enabled ?? false)
-      setL2(b?.enabled ?? false)
-      setL3(c?.enabled ?? false)
+      setBasic(a?.enabled ?? false)
+      setEnhanced(b?.enabled ?? false)
     } finally {
       setLoading(false)
     }
-  }, [scopeType, scopeId, projectId])
+  }, [scopeType, scopeId])
 
   useEffect(() => {
     void load()
@@ -42,13 +39,16 @@ export function PrivacyConsentPanel({
 
   const toggle = async (cap: string, value: boolean, setter: (v: boolean) => void): Promise<void> => {
     setter(value)
-    const st = cap === PRIVACY_CAPABILITIES.L3_PROJECT_DIR ? 'project' : scopeType
-    const sid = cap === PRIVACY_CAPABILITIES.L3_PROJECT_DIR && projectId != null ? String(projectId) : scopeId
-    await setPrivacyConsent(st, sid, cap as typeof PRIVACY_CAPABILITIES.L1_CLOUD, value)
+    await setPrivacyConsent(
+      scopeType,
+      scopeId,
+      cap as typeof PRIVACY_CAPABILITIES.L1_CLOUD,
+      value
+    )
   }
 
   if (loading) {
-    return <p className="text-sm text-gray-400">加载授权状态…</p>
+    return <p className="text-sm text-gray-400">{t('privacyDetail.consentLoading')}</p>
   }
 
   const row = (
@@ -82,38 +82,28 @@ export function PrivacyConsentPanel({
     <section className={compact ? 'space-y-3' : 'bg-white rounded-xl border border-gray-200 p-6 space-y-4'}>
       {!compact && (
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">分级采集与云端 AI</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            按 PRO5.0 分级授权；生成复盘/报告前可预览实际上传内容。
-          </p>
+          <h2 className="text-lg font-semibold text-gray-900">{t('privacyDetail.consentTitle')}</h2>
+          <p className="text-sm text-gray-500 mt-1">{t('privacyDetail.consentSubtitle')}</p>
         </div>
       )}
       {row(
-        'cap-l0',
-        'L0 本地基础',
-        '进程名、窗口标题、时长仅存本地（始终开启）',
+        'cap-local',
+        t('privacyDetail.localBase'),
+        t('privacyDetail.localBaseHint'),
         true,
         () => {},
         true
       )}
-      {row('cap-l1', 'L1 云端结构化', '允许将脱敏后的项目名、分类、已确认资产等发送至云端 AI', l1, v =>
-        void toggle(PRIVACY_CAPABILITIES.L1_CLOUD, v, setL1)
+      {row('cap-basic', t('privacyDetail.basicCloud'), t('privacyDetail.basicCloudHint'), basic, v =>
+        void toggle(PRIVACY_CAPABILITIES.L1_CLOUD, v, setBasic)
       )}
       {row(
-        'cap-l2',
-        'L2 增强摘要',
-        'Git 统计、浏览器/会议标题摘要、活跃文档片段（不上传原始窗口标题与全文）',
-        l2,
-        v => void toggle(PRIVACY_CAPABILITIES.L2_ENHANCED, v, setL2)
+        'cap-enhanced',
+        t('privacyDetail.enhanced'),
+        t('privacyDetail.enhancedHint'),
+        enhanced,
+        v => void toggle(PRIVACY_CAPABILITIES.L2_ENHANCED, v, setEnhanced)
       )}
-      {projectId != null &&
-        row(
-          'cap-l3',
-          'L3 项目目录文档',
-          '仅读取本项目「绑定文档目录」下的片段摘要（需单独授权，未授权不扫描）',
-          l3,
-          v => void toggle(PRIVACY_CAPABILITIES.L3_PROJECT_DIR, v, setL3)
-        )}
     </section>
   )
 }

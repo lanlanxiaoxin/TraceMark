@@ -33,6 +33,10 @@ export async function exportMarkdown(content: string, defaultName: string): Prom
   return window.electronAPI.exportMarkdown(content, defaultName)
 }
 
+export async function saveReportPng(dataUrl: string, defaultName: string): Promise<boolean> {
+  return window.electronAPI.saveReportPng(dataUrl, defaultName)
+}
+
 export function startOfWeek(ts: number): number {
   const d = new Date(ts)
   const day = d.getDay()
