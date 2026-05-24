@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import i18n from '@/i18n'
 import type { EvidenceItem, WorkAsset } from '@/env'
 
 export interface SplitConfirmPayload {
@@ -28,16 +30,22 @@ export function SplitWorkAssetDialog({
   onCancel,
   busy
 }: SplitWorkAssetDialogProps): JSX.Element | null {
+  const { t } = useTranslation()
   const [titleA, setTitleA] = useState('')
   const [titleB, setTitleB] = useState('')
   const [assignTo, setAssignTo] = useState<number[]>([])
+  const initializedForId = useRef<number | null>(null)
 
   useEffect(() => {
-    if (asset) {
-      setTitleA(asset.title)
-      setTitleB(`${asset.title}（续）`)
-      setAssignTo(defaultAssignments(asset.evidence.length))
+    if (!asset) {
+      initializedForId.current = null
+      return
     }
+    if (initializedForId.current === asset.id) return
+    initializedForId.current = asset.id
+    setTitleA(asset.title)
+    setTitleB(`${asset.title}${i18n.t('splitDialog.titleBSuffix')}`)
+    setAssignTo(defaultAssignments(asset.evidence.length))
   }, [asset])
 
   const splitValid = useMemo(() => {
@@ -82,50 +90,53 @@ export function SplitWorkAssetDialog({
       aria-modal="true"
       aria-labelledby="split-asset-title"
     >
-      <div className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-xl border border-gray-200">
+      <div
+        className="w-full max-w-lg max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-xl border border-gray-200"
+        onMouseDown={e => e.stopPropagation()}
+      >
         <div className="px-5 py-4 border-b border-gray-100 shrink-0">
           <h2 id="split-asset-title" className="text-lg font-semibold text-gray-900">
-            拆分工作资产
+            {t('splitDialog.title')}
           </h2>
-          <p className="text-sm text-gray-500 mt-1">
-            原卡变为第一条；请为每条证据选择归属，再填写两条标题。
-          </p>
+          <p className="text-sm text-gray-500 mt-1">{t('splitDialog.subtitle')}</p>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           <div>
             <label htmlFor="split-title-a" className="block text-sm font-medium text-gray-700 mb-1">
-              第一条标题
+              {t('splitDialog.titleA')}
             </label>
             <input
               id="split-title-a"
               type="text"
               value={titleA}
               onChange={e => setTitleA(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              placeholder={t('splitDialog.titleAPlaceholder')}
+              className="w-full text-sm font-medium text-gray-900 rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900/20 focus:border-gray-400"
               autoFocus
             />
           </div>
           <div>
             <label htmlFor="split-title-b" className="block text-sm font-medium text-gray-700 mb-1">
-              第二条标题
+              {t('splitDialog.titleB')}
             </label>
             <input
               id="split-title-b"
               type="text"
               value={titleB}
               onChange={e => setTitleB(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              placeholder={t('splitDialog.titleBPlaceholder')}
+              className="w-full text-sm font-medium text-gray-900 rounded-lg border border-gray-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-gray-900/20 focus:border-gray-400"
             />
           </div>
 
           {asset.evidence.length > 0 && (
             <div>
               <p className="text-sm font-medium text-gray-700 mb-2">
-                证据归属（{asset.evidence.length} 条）
+                {t('splitDialog.evidenceAssign', { count: asset.evidence.length })}
               </p>
               {!splitValid && (
                 <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-2">
-                  请至少为第一条、第二条各分配 1 条证据。
+                  {t('splitDialog.evidenceWarning')}
                 </p>
               )}
               <ul className="space-y-2 max-h-48 overflow-y-auto border border-gray-100 rounded-lg p-2">
@@ -148,7 +159,7 @@ export function SplitWorkAssetDialog({
                             : 'bg-gray-100 text-gray-600'
                         }`}
                       >
-                        一
+                        {t('splitDialog.partA')}
                       </button>
                       <button
                         type="button"
@@ -159,15 +170,13 @@ export function SplitWorkAssetDialog({
                             : 'bg-gray-100 text-gray-600'
                         }`}
                       >
-                        二
+                        {t('splitDialog.partB')}
                       </button>
                     </div>
                   </li>
                 ))}
               </ul>
-              <p className="text-xs text-gray-500 mt-2">
-                默认后半段证据划入第二条，可点击「一」「二」调整。
-              </p>
+              <p className="text-xs text-gray-500 mt-2">{t('splitDialog.evidenceHint')}</p>
             </div>
           )}
         </div>
@@ -178,7 +187,7 @@ export function SplitWorkAssetDialog({
             disabled={busy}
             className="flex-1 py-2 text-sm rounded-lg border border-gray-200 text-gray-700 disabled:opacity-40"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -186,7 +195,7 @@ export function SplitWorkAssetDialog({
             onClick={handleConfirm}
             className="flex-1 py-2 text-sm font-medium rounded-lg bg-gray-900 text-white disabled:opacity-40"
           >
-            {busy ? '拆分中…' : '确认拆分'}
+            {busy ? t('splitDialog.confirming') : t('splitDialog.confirm')}
           </button>
         </div>
       </div>

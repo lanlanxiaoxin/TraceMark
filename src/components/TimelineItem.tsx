@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronRight, Star, Trash2, MessageSquarePlus, MessageSquare } from 'lucide-react'
 import type { ActivityLog } from '@/lib/activityLogs'
 import {
@@ -13,6 +14,7 @@ import { getCategoryLabel, getCategoryColor } from '@/lib/categoryLabels'
 interface TimelineItemProps {
   log: ActivityLog
   onDeleted?: (id: number) => void
+  highlighted?: boolean
 }
 
 function displayTitle(log: ActivityLog): string {
@@ -21,11 +23,12 @@ function displayTitle(log: ActivityLog): string {
   }
   if (log.parsed_file) return log.parsed_file
   if (log.parsed_project) return log.parsed_project
-  return log.sanitized_title || log.window_title || '（无窗口标题）'
+  return log.sanitized_title || log.window_title || ''
 }
 
-export function TimelineItem({ log, onDeleted }: TimelineItemProps): JSX.Element {
-  const [expanded, setExpanded] = useState(false)
+export function TimelineItem({ log, onDeleted, highlighted }: TimelineItemProps): JSX.Element {
+  const { t } = useTranslation()
+  const [expanded, setExpanded] = useState(() => highlighted === true)
   const [isImportant, setIsImportant] = useState(log.is_important === 1)
   const [note, setNote] = useState(log.user_note || '')
   const [showNoteInput, setShowNoteInput] = useState(false)
@@ -37,6 +40,10 @@ export function TimelineItem({ log, onDeleted }: TimelineItemProps): JSX.Element
   const duration = formatDuration(log.started_at, log.ended_at)
   const categoryLabel = getCategoryLabel(log.category)
   const categoryColor = getCategoryColor(log.category)
+
+  useEffect(() => {
+    if (highlighted) setExpanded(true)
+  }, [highlighted])
 
   if (deleted) return <></>
 
@@ -82,11 +89,22 @@ export function TimelineItem({ log, onDeleted }: TimelineItemProps): JSX.Element
   }
 
   return (
-    <div className={`border-b border-gray-100 last:border-0 ${isImportant ? 'bg-amber-50/50' : ''}`}>
+    <div
+      className={`border-b border-gray-100 last:border-0 ${
+        highlighted
+          ? 'border-l-4 border-l-indigo-500 bg-indigo-50/90 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.25)]'
+          : ''
+      } ${!highlighted && isImportant ? 'bg-amber-50/50' : ''}`}
+    >
+      {highlighted ? (
+        <p className="px-4 pt-2 text-[11px] font-medium text-indigo-700">{t('timeline.linkedActivity')}</p>
+      ) : null}
       <button
         type="button"
         onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-gray-50/80 transition-colors"
+        className={`w-full flex items-center gap-2 px-4 py-3 text-left transition-colors ${
+          highlighted ? 'hover:bg-indigo-50' : 'hover:bg-gray-50/80'
+        }`}
         aria-expanded={expanded}
       >
         <span className="text-xs text-gray-400 tabular-nums w-12 shrink-0">
@@ -95,7 +113,9 @@ export function TimelineItem({ log, onDeleted }: TimelineItemProps): JSX.Element
         <span className={`text-xs font-medium px-2 py-0.5 rounded shrink-0 ${categoryColor}`}>
           {categoryLabel}
         </span>
-        <span className="text-sm text-gray-900 truncate flex-1">{displayTitle(log)}</span>
+        <span className="text-sm text-gray-900 truncate flex-1">
+          {displayTitle(log) || t('timeline.noWindowTitle')}
+        </span>
         <span className="text-xs text-gray-500 tabular-nums shrink-0">{duration}</span>
 
         <button
@@ -104,7 +124,7 @@ export function TimelineItem({ log, onDeleted }: TimelineItemProps): JSX.Element
           className={`shrink-0 p-1 rounded transition-colors ${
             isImportant ? 'text-amber-500 hover:text-amber-600' : 'text-gray-300 hover:text-amber-400'
           }`}
-          aria-label={isImportant ? '取消标记重要' : '标记重要'}
+          aria-label={isImportant ? t('timeline.unmarkImportant') : t('timeline.markImportant')}
         >
           <Star className={`w-4 h-4 ${isImportant ? 'fill-current' : ''}`} />
         </button>
@@ -119,10 +139,12 @@ export function TimelineItem({ log, onDeleted }: TimelineItemProps): JSX.Element
       {expanded && (
         <div className="px-4 pb-3 pl-[4.5rem] space-y-2">
           <p className="text-xs text-gray-500">
-            进程: <span className="font-mono">{log.process_name}</span>
+            {t('timeline.processLabel')}: <span className="font-mono">{log.process_name}</span>
           </p>
           {log.sanitized_title && (
-            <p className="text-xs text-gray-500 break-all">窗口: {log.sanitized_title}</p>
+            <p className="text-xs text-gray-500 break-all">
+              {t('timeline.windowLabel')}: {log.sanitized_title}
+            </p>
           )}
           {log.executable_path && (
             <p className="text-xs text-gray-400 break-all font-mono">{log.executable_path}</p>
@@ -142,7 +164,7 @@ export function TimelineItem({ log, onDeleted }: TimelineItemProps): JSX.Element
               }`}
             >
               <MessageSquarePlus className="w-3 h-3" />
-              备注
+              {t('timeline.note')}
             </button>
 
             <button
@@ -155,7 +177,7 @@ export function TimelineItem({ log, onDeleted }: TimelineItemProps): JSX.Element
               }`}
             >
               <Trash2 className="w-3 h-3" />
-              {confirmDelete ? '确认删除？' : '删除'}
+              {confirmDelete ? t('common.confirmDelete') : t('common.delete')}
             </button>
           </div>
 
@@ -169,7 +191,7 @@ export function TimelineItem({ log, onDeleted }: TimelineItemProps): JSX.Element
                   if (e.key === 'Enter') handleSaveNote(e as unknown as React.MouseEvent)
                   if (e.key === 'Escape') handleCancelNote(e as unknown as React.MouseEvent)
                 }}
-                placeholder="添加备注..."
+                placeholder={t('timeline.notePlaceholder')}
                 className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
                 autoFocus
               />
@@ -179,14 +201,14 @@ export function TimelineItem({ log, onDeleted }: TimelineItemProps): JSX.Element
                 disabled={savingNote}
                 className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
               >
-                {savingNote ? '保存...' : '保存'}
+                {savingNote ? t('common.saving') : t('common.save')}
               </button>
               <button
                 type="button"
                 onClick={handleCancelNote}
                 className="px-3 py-1.5 text-xs rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50"
               >
-                取消
+                {t('common.cancel')}
               </button>
             </div>
           )}

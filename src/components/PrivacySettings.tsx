@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface PrivacySettingsProps {
   settings: Record<string, string>
@@ -18,6 +19,7 @@ export function PrivacySettings({
   settings,
   updateSetting
 }: PrivacySettingsProps): JSX.Element {
+  const { t } = useTranslation()
   const keywords = parseJsonArray(settings.exclude_title_keywords)
   const [keywordInput, setKeywordInput] = useState('')
   const [rulesText, setRulesText] = useState(
@@ -46,28 +48,26 @@ export function PrivacySettings({
   const saveRules = async (): Promise<void> => {
     try {
       const parsed = JSON.parse(rulesText)
-      if (!Array.isArray(parsed)) throw new Error('必须是 JSON 数组')
+      if (!Array.isArray(parsed)) throw new Error(t('common.errMustBeArray'))
       setRulesError(null)
       await updateSetting('sanitization_rules', JSON.stringify(parsed))
     } catch {
-      setRulesError('JSON 格式无效，请使用 [{ "pattern": "...", "replacement": "..." }] 格式')
+      setRulesError(t('common.errJsonInvalid'))
     }
   }
 
   return (
     <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
       <div>
-        <h2 className="text-lg font-semibold text-gray-900">隐私</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          采集前排除敏感标题、存储时脱敏；AI 仅接收结构化摘要，不上传原始窗口标题
-        </p>
+        <h2 className="text-lg font-semibold text-gray-900">{t('privacyDetail.title')}</h2>
+        <p className="text-sm text-gray-500 mt-1">{t('privacyDetail.subtitle')}</p>
       </div>
 
       <div>
         <label htmlFor="exclude-keywords" className="block text-sm font-medium text-gray-700 mb-1">
-          排除窗口标题关键词
+          {t('privacyDetail.excludeTitle')}
         </label>
-        <p className="text-xs text-gray-400 mb-2">标题包含以下词的活动将不被记录</p>
+        <p className="text-xs text-gray-400 mb-2">{t('privacyDetail.excludeHint')}</p>
         <div className="flex gap-2">
           <input
             id="exclude-keywords"
@@ -77,7 +77,7 @@ export function PrivacySettings({
             onKeyDown={e => {
               if (e.key === 'Enter') void addKeyword()
             }}
-            placeholder="例如：网银、工资、绩效"
+            placeholder={t('privacyDetail.excludePlaceholder')}
             className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <button
@@ -85,7 +85,7 @@ export function PrivacySettings({
             onClick={() => void addKeyword()}
             className="px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-50"
           >
-            添加
+            {t('common.add')}
           </button>
         </div>
         {keywords.length > 0 && (
@@ -100,7 +100,7 @@ export function PrivacySettings({
                   type="button"
                   onClick={() => void removeKeyword(word)}
                   className="text-gray-400 hover:text-gray-600"
-                  aria-label={`移除 ${word}`}
+                  aria-label={`${t('common.remove')} ${word}`}
                 >
                   ×
                 </button>
@@ -112,11 +112,9 @@ export function PrivacySettings({
 
       <div>
         <label htmlFor="sanitization-rules" className="block text-sm font-medium text-gray-700 mb-1">
-          脱敏规则（JSON）
+          {t('privacyDetail.rulesTitle')}
         </label>
-        <p className="text-xs text-gray-400 mb-2">
-          存储时应用的正则替换，例如 pattern / replacement 对象数组
-        </p>
+        <p className="text-xs text-gray-400 mb-2">{t('privacyDetail.rulesHint')}</p>
         <textarea
           id="sanitization-rules"
           value={rulesText}
@@ -130,7 +128,7 @@ export function PrivacySettings({
           onClick={() => void saveRules()}
           className="mt-2 px-3 py-1.5 text-sm rounded-lg bg-gray-900 text-white hover:bg-gray-800"
         >
-          保存脱敏规则
+          {t('privacyDetail.saveRules')}
         </button>
       </div>
 
@@ -144,10 +142,8 @@ export function PrivacySettings({
           className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
         />
         <div>
-          <span className="text-sm font-medium text-gray-700">Git 集成</span>
-          <p className="text-xs text-gray-500">
-            报告生成时查询 Git 提交记录（不上传仓库路径）
-          </p>
+          <span className="text-sm font-medium text-gray-700">{t('privacyDetail.gitToggle')}</span>
+          <p className="text-xs text-gray-500">{t('privacyDetail.gitHint')}</p>
         </div>
       </label>
     </section>

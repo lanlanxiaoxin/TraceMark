@@ -1,6 +1,7 @@
 import { app, Menu, Tray, BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
+import { tElectron } from './ui-locale'
 
 let tray: Tray | null = null
 let appIsQuitting = false
@@ -39,7 +40,7 @@ export async function initSystemTray(getMainWindow: () => BrowserWindow | null):
 
   const icon = await resolveTrayIcon()
   tray = new Tray(icon)
-  tray.setToolTip('TraceMack')
+  tray.setToolTip('TraceMark')
 
   const showMain = (): void => {
     const win = getMainWindow()
@@ -51,10 +52,10 @@ export async function initSystemTray(getMainWindow: () => BrowserWindow | null):
   }
 
   const contextMenu = Menu.buildFromTemplate([
-    { label: '打开 TraceMack', click: showMain },
+    { label: tElectron('electron.trayOpen'), click: showMain },
     { type: 'separator' },
     {
-      label: '退出',
+      label: tElectron('electron.trayQuit'),
       click: () => {
         appIsQuitting = true
         tray?.destroy()

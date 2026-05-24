@@ -143,7 +143,13 @@ function buildEvidence(unit: ActivityUnit, projectName: string | null): Evidence
       summary: summary ?? '活动片段',
       activityLogId: log.id,
       startedAt: log.started_at,
-      endedAt: log.ended_at
+      endedAt: log.ended_at,
+      metadata: {
+        processName: log.process_name,
+        file: log.parsed_file ?? undefined,
+        project: log.parsed_project ?? undefined,
+        windowTitle: log.sanitized_title ?? undefined
+      }
     })
   }
 
@@ -153,10 +159,12 @@ function buildEvidence(unit: ActivityUnit, projectName: string | null): Evidence
       evidence.push({
         type: 'git',
         summary: `变更 ${snap.filesChanged} 个文件 (+${snap.insertions}/-${snap.deletions})`,
+        startedAt: snap.timestamp,
         metadata: {
           filesChanged: snap.filesChanged,
           insertions: snap.insertions,
-          deletions: snap.deletions
+          deletions: snap.deletions,
+          changedFiles: snap.files.slice(0, 8).join(', ')
         }
       })
     }

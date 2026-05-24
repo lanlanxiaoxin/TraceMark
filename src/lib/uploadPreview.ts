@@ -25,3 +25,7 @@ export function buildActivityReportPreview(
 export function buildDailyNarrativeUploadPreview(dateMs: number): Promise<UploadPreview> {
   return window.electronAPI.buildDailyNarrativeUploadPreview(dateMs)
 }
+
+export function buildSealDailyReportUploadPreview(dateMs: number): Promise<UploadPreview> {
+  return window.electronAPI.buildSealDailyReportUploadPreview(dateMs)
+}

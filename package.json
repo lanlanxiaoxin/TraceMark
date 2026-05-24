@@ -1,7 +1,7 @@
 {
-  "name": "TraceMack",
-  "version": "0.1.0",
-  "description": "个人工作痕迹自动记账本",
+  "name": "TraceMark",
+  "version": "0.2.0",
+  "description": "程序员日报/周报代笔与上下文回忆机（个人工作资产账本）",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "node scripts/dev.cjs electron-vite dev",
@@ -15,11 +15,14 @@
     "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
     "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
     "check:utf8": "node scripts/check-utf8-ui.mjs",
-    "test": "node scripts/check-utf8-ui.mjs && node scripts/smoke-pro50.mjs"
+    "test": "node scripts/check-utf8-ui.mjs && node scripts/smoke-pro50.mjs && npm run test:e2e",
+    "test:e2e": "node scripts/run-smoke-e2e.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.9.0",
+    "i18next": "^26.2.0",
     "lucide-react": "^1.14.0",
+    "react-i18next": "^17.0.8",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1"
   },
@@ -36,6 +39,7 @@
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "tailwindcss": "^4.3.0",
+    "tsx": "^4.19.4",
     "typescript": "^5.7.0"
   }
 }

@@ -4,9 +4,11 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-TraceMark is a **personal work-asset ledger** for developers and product people. It turns scattered signals from your desktop—foreground apps, window titles, Git activity, and optional enriched summaries—into **confirmable work-asset cards**, organized by **project spaces**, so you can build a private knowledge base and run **weekly / phase retrospectives**.
+TraceMark is a **daily/weekly report co-pilot + context recall tool** for developers (personal work-asset ledger, MIT). It captures foreground activity and Git signals locally, turns them into **confirmable work assets** via **Today Seal**, and generates daily reports, **weekly battle summaries**, and shareable **Weekly Memory Capsule** PNGs. **Ctrl+K** searches past assets and raw activity, then jumps to the timeline with highlight.
 
-> **Not** an employee-monitoring tool, team timesheet system, or full-desktop memory recorder. Data stays on your machine by default; you stay in control of what gets confirmed and what (if anything) goes to the cloud.
+> **Not** employee monitoring, team timesheets, or full-desktop recording. Data stays local by default; you choose what to confirm and whether cloud AI is used.
+
+![Today seal to daily report](docs/assets/showTraceMark.gif)
 
 **Repository:** https://github.com/lanlanxiaoxin/TraceMark
 
@@ -21,28 +23,35 @@ TraceMark is a **personal work-asset ledger** for developers and product people.
 
 ---
 
+## 60-second path
+
+1. `npm run dev`, enable process monitoring in **Settings** (Windows).
+2. Complete **Today Seal** on the **Today** tab (3 steps).
+3. **Reports** → generate a **daily report**; get a **weekly battle** nudge on Fridays.
+4. **Ctrl+K** → e.g. `auth @last-week` → open timeline at the right segment.
+5. **Reports → Weekly** → **Export Weekly Memory Capsule** (1080×1920 PNG).
+
+See [docs/demo/RECORDING.md](docs/demo/RECORDING.md) for the demo GIF checklist.
+
 ## What it does
 
 ```text
-Foreground activity capture
-  → Window / process parsing & sanitization
-  → Project-space attribution
-  → Evidence (Git, browser titles, optional summaries)
-  → Suggested work-asset cards
-  → You confirm / edit / ignore in Today inbox
-  → Confirmed assets → project library
-  → Weekly & project-phase retrospectives
+Activity capture → sanitize → project spaces
+  → suggested assets + Today Seal
+  → confirmed library
+  → daily report / weekly battle / memory capsule PNG
+  → Ctrl+K recall → timeline highlight
 ```
 
 ### Main navigation
 
 | Tab | Purpose |
 |-----|---------|
-| **Today** | Work-asset inbox (suggested → confirmed) |
-| **Projects** | Project spaces, aliases, confirmed assets |
-| **Timeline** | Raw activity log (debug & history) |
-| **Reports** | Daily / weekly report export (helper) |
-| **Settings** | Tracking, privacy tiers, optional cloud AI |
+| **Today** | Today Seal + asset inbox |
+| **Projects** | Spaces, library, retrospectives |
+| **Timeline** | Raw activity by day + recall jump |
+| **Reports** | Daily, weekly battle, memory capsule export |
+| **Settings** | Tracking, privacy, AI, local metrics |
 
 ### Work-asset card types
 
@@ -148,6 +157,13 @@ scripts/           dev, test, packaging helpers
 Contributor-oriented notes: [CLAUDE.md](CLAUDE.md).
 
 ---
+
+## Feedback & beta (v0.2.0)
+
+- [Release notes (EN)](docs/RELEASE_NOTES_v0.2.0.en.md) · [中文版](docs/RELEASE_NOTES_v0.2.0.md) · [Feedback guide](docs/FEEDBACK.md)
+- [GitHub Issues](https://github.com/lanlanxiaoxin/TraceMark/issues) · [Discussions](https://github.com/lanlanxiaoxin/TraceMark/discussions)
+
+Looking for **5 developers** to try TraceMark for 2 weeks — open an Issue with `[beta-trial]` in the title.
 
 ## Contributing
 

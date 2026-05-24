@@ -1,5 +1,8 @@
 import { Notification, BrowserWindow, app } from 'electron'
 import { getDb } from './database'
+import { currentWeekStartMs } from './date-bounds'
+import { recordLocalMetric } from './local-metrics'
+import { tElectron } from './ui-locale'
 
 let checkTimer: ReturnType<typeof setInterval> | null = null
 let lastDailyNotify: string | null = null
@@ -28,21 +31,37 @@ function focusMainWindow(): void {
   win.focus()
 }
 
+function navigateToWeeklyBattle(): void {
+  const win = BrowserWindow.getAllWindows()[0]
+  if (!win) return
+  focusMainWindow()
+  const weekStartMs = currentWeekStartMs()
+  try {
+    recordLocalMetric('weekly_battle_opened', { weekStartMs })
+  } catch {
+    /* ignore */
+  }
+  win.webContents.send('app:navigate', {
+    page: 'reports',
+    intent: { type: 'weekly', dateMs: weekStartMs, autoGenerate: true }
+  })
+}
+
 function showDailyReportNotification(): void {
   const notif = new Notification({
-    title: 'TraceMack — 日报提醒',
-    body: '今日工作记录已就绪，点击查看时间轴并生成日报。'
+    title: tElectron('electron.notifyDailyTitle'),
+    body: tElectron('electron.notifyDailyBody')
   })
   notif.on('click', focusMainWindow)
   notif.show()
 }
 
-function showWeeklyReportNotification(): void {
+function showWeeklyBattleNotification(): void {
   const notif = new Notification({
-    title: 'TraceMack — 周报提醒',
-    body: '本周工作记录已就绪，点击查看并生成周报。'
+    title: tElectron('electron.notifyFridayTitle'),
+    body: tElectron('electron.notifyFridayBody')
   })
-  notif.on('click', focusMainWindow)
+  notif.on('click', navigateToWeeklyBattle)
   notif.show()
 }
 
@@ -59,7 +78,6 @@ export function initNotificationScheduler(): void {
     const minute = now.getMinutes()
     const dayOfWeek = now.getDay()
 
-    // Daily reminder at configurable time
     const dailyTime = readSetting('daily_reminder_time', '18:00')
     const [dailyHour, dailyMinute] = dailyTime.split(':').map(Number)
     if (enabled && hour === dailyHour && minute === dailyMinute && lastDailyNotify !== today) {
@@ -67,14 +85,13 @@ export function initNotificationScheduler(): void {
       showDailyReportNotification()
     }
 
-    // Friday weekly reminder at configurable time (dayOfWeek === 5 = Friday)
-    const fridayTime = readSetting('friday_reminder_time', '16:00')
+    const fridayTime = readSetting('friday_reminder_time', '17:00')
     const [friHour, friMinute] = fridayTime.split(':').map(Number)
     if (fridayReminder && dayOfWeek === 5 && hour === friHour && minute === friMinute) {
       const weekNum = getWeekNumber(now)
       if (lastWeeklyNotify !== weekNum) {
         lastWeeklyNotify = weekNum
-        showWeeklyReportNotification()
+        showWeeklyBattleNotification()
       }
     }
   }, 60_000)

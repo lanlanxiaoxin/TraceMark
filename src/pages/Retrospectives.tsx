@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, ExternalLink, Save, Sparkles } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { ChevronLeft, ChevronRight, ExternalLink, Pencil, Save, Sparkles } from 'lucide-react'
+import { ReportMarkdownView } from '@/components/ReportMarkdownView'
 import type {
   ProjectSpace,
   RetroType,
@@ -54,6 +56,7 @@ export function Retrospectives({
   onPrefillConsumed,
   onOpenReports
 }: RetrospectivesProps): JSX.Element {
+  const { t } = useTranslation()
   const [spaces, setSpaces] = useState<ProjectSpace[]>([])
   const [saved, setSaved] = useState<Retrospective[]>([])
   const [retroType, setRetroType] = useState<RetroType>(initialType ?? 'weekly')
@@ -81,6 +84,7 @@ export function Retrospectives({
   const [degraded, setDegraded] = useState<string | null>(null)
   const [refAssets, setRefAssets] = useState<WorkAsset[]>([])
   const [periodReports, setPeriodReports] = useState<StoredReportSummary[]>([])
+  const [editMode, setEditMode] = useState(false)
 
   useEffect(() => {
     if (initialProjectId !== undefined && initialProjectId !== null) {
@@ -158,7 +162,7 @@ export function Retrospectives({
   const openGeneratePreview = async (): Promise<void> => {
     setError(null)
     if (retroType === 'project_phase' && projectId === '') {
-      setError('项目阶段复盘需选择项目')
+      setError(t('retrospectives.needProject'))
       return
     }
     try {
@@ -168,7 +172,7 @@ export function Retrospectives({
           : await buildRetroPhasePreview(projectId as number, phaseStart, phaseEnd)
       setPreview(p)
     } catch (e) {
-      setError(e instanceof Error ? e.message : '无法加载上传预览')
+      setError(e instanceof Error ? e.message : t('dailyNarrative.errPreview'))
     }
   }
 
@@ -186,6 +190,7 @@ export function Retrospectives({
         setSourceIds(result.sourceAssetIds)
         setUsedReportIds(result.sourceReportIds)
         setMode(result.mode)
+        setEditMode(false)
         if (result.degradedFromAi && result.degradationReason) {
           setDegraded(result.degradationReason)
         }
@@ -200,12 +205,13 @@ export function Retrospectives({
         setSourceIds(result.sourceAssetIds)
         setUsedReportIds(result.sourceReportIds)
         setMode(result.mode)
+        setEditMode(false)
         if (result.degradedFromAi && result.degradationReason) {
           setDegraded(result.degradationReason)
         }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : '生成失败')
+      setError(e instanceof Error ? e.message : t('common.errGenerate'))
     } finally {
       setGenerating(false)
     }
@@ -228,7 +234,7 @@ export function Retrospectives({
       })
       await loadSaved()
     } catch (e) {
-      setError(e instanceof Error ? e.message : '保存失败')
+      setError(e instanceof Error ? e.message : t('common.errSave'))
     } finally {
       setSaving(false)
     }
@@ -244,7 +250,7 @@ export function Retrospectives({
   }
 
   const handleDeleteSaved = async (id: number): Promise<void> => {
-    if (!confirm('删除这条复盘记录？')) return
+    if (!confirm(t('retrospectives.deleteConfirm'))) return
     await deleteRetrospective(id)
     await loadSaved()
   }
@@ -266,32 +272,30 @@ export function Retrospectives({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 max-w-3xl mx-auto space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-gray-900">复盘</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          仅基于已确认的成果与过程资产生成；同期日报/周报仅作语气参考
-        </p>
+        <h2 className="text-lg font-semibold text-gray-900">{t('retrospectives.title')}</h2>
+        <p className="text-sm text-gray-500 mt-1">{t('retrospectives.subtitle')}</p>
       </div>
       <div className="flex gap-2">
-        <button type="button" onClick={() => setRetroType('weekly')} className={`px-3 py-1.5 text-sm rounded-lg border ${retroType === 'weekly' ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200'}`}>周复盘</button>
-        <button type="button" onClick={() => setRetroType('project_phase')} className={`px-3 py-1.5 text-sm rounded-lg border ${retroType === 'project_phase' ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200'}`}>项目阶段复盘</button>
+        <button type="button" onClick={() => setRetroType('weekly')} className={`px-3 py-1.5 text-sm rounded-lg border ${retroType === 'weekly' ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200'}`}>{t('retrospectives.weekly')}</button>
+        <button type="button" onClick={() => setRetroType('project_phase')} className={`px-3 py-1.5 text-sm rounded-lg border ${retroType === 'project_phase' ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-200'}`}>{t('retrospectives.projectPhase')}</button>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <select value={projectId} onChange={e => setProjectId(e.target.value === '' ? '' : Number(e.target.value))} className="text-sm rounded-lg border border-gray-200 px-3 py-2" aria-label="项目">
-          <option value="">{retroType === 'weekly' ? '全部项目' : '选择项目…'}</option>
+        <select value={projectId} onChange={e => setProjectId(e.target.value === '' ? '' : Number(e.target.value))} className="text-sm rounded-lg border border-gray-200 px-3 py-2" aria-label={t('nav.projects')}>
+          <option value="">{retroType === 'weekly' ? t('retrospectives.allProjects') : t('retrospectives.selectProject')}</option>
           {spaces.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
         </select>
         {retroType === 'weekly' ? (
           <div className="flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-2 py-1">
-            <button type="button" onClick={() => shiftWeek(-1)} className="p-2 rounded-lg hover:bg-gray-100" aria-label="上一周"><ChevronLeft className="w-4 h-4" /></button>
+            <button type="button" onClick={() => shiftWeek(-1)} className="p-2 rounded-lg hover:bg-gray-100" aria-label={t('retrospectives.prevWeek')}><ChevronLeft className="w-4 h-4" /></button>
             <span className="text-sm text-gray-700">{formatWeekLabel(weekStart)}</span>
-            <button type="button" onClick={() => shiftWeek(1)} className="p-2 rounded-lg hover:bg-gray-100" aria-label="下一周"><ChevronRight className="w-4 h-4" /></button>
+            <button type="button" onClick={() => shiftWeek(1)} className="p-2 rounded-lg hover:bg-gray-100" aria-label={t('retrospectives.nextWeek')}><ChevronRight className="w-4 h-4" /></button>
           </div>
         ) : (
           <>
-            <input type="date" value={new Date(phaseStart).toISOString().slice(0, 10)} onChange={e => { const d = new Date(e.target.value); d.setHours(0,0,0,0); setPhaseStart(d.getTime()) }} className="text-sm rounded-lg border border-gray-200 px-3 py-2" aria-label="阶段开始" />
-            <input type="date" value={new Date(phaseEnd).toISOString().slice(0, 10)} onChange={e => { const d = new Date(e.target.value); d.setHours(23,59,59,999); setPhaseEnd(d.getTime()) }} className="text-sm rounded-lg border border-gray-200 px-3 py-2" aria-label="阶段结束" />
+            <input type="date" value={new Date(phaseStart).toISOString().slice(0, 10)} onChange={e => { const d = new Date(e.target.value); d.setHours(0,0,0,0); setPhaseStart(d.getTime()) }} className="text-sm rounded-lg border border-gray-200 px-3 py-2" aria-label={t('retrospectives.phaseStart')} />
+            <input type="date" value={new Date(phaseEnd).toISOString().slice(0, 10)} onChange={e => { const d = new Date(e.target.value); d.setHours(23,59,59,999); setPhaseEnd(d.getTime()) }} className="text-sm rounded-lg border border-gray-200 px-3 py-2" aria-label={t('retrospectives.phaseEnd')} />
           </>
         )}
       </div>
@@ -300,18 +304,14 @@ export function Retrospectives({
       <section className="rounded-xl border border-gray-200 bg-white px-4 py-3 space-y-2">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold text-gray-900">
-            同期报告（{periodReports.length}）
+            {t('retrospectives.periodReports', { count: periodReports.length })}
           </h3>
           {periodReports.length > 0 && (
-            <span className="text-xs text-gray-500">
-              勾选后将作为「用户口径补充」送入 AI；不影响离线模式
-            </span>
+            <span className="text-xs text-gray-500">{t('retrospectives.periodReportsHint')}</span>
           )}
         </div>
         {periodReports.length === 0 ? (
-          <p className="text-xs text-gray-500">
-            该时段尚无保存的日报/周报。可在「报告」页生成后再回来复盘。
-          </p>
+          <p className="text-xs text-gray-500">{t('retrospectives.noPeriodReports')}</p>
         ) : (
           <ul className="space-y-1.5">
             {periodReports.map(r => {
@@ -330,7 +330,7 @@ export function Retrospectives({
                     />
                     <span className="text-gray-800 truncate">
                       <span className="inline-block px-1.5 py-0.5 mr-2 text-[10px] uppercase tracking-wide rounded bg-gray-100 text-gray-600">
-                        {r.type === 'daily' ? '日报' : '周报'}
+                        {r.type === 'daily' ? t('reports.daily') : t('reports.weekly')}
                       </span>
                       {formatShortDate(r.date_start)}
                       {r.type === 'weekly' && ` – ${formatShortDate(r.date_end)}`}
@@ -341,9 +341,9 @@ export function Retrospectives({
                       type="button"
                       onClick={() => jumpToReport(r)}
                       className="shrink-0 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
-                      aria-label="在报告中查看"
+                      aria-label={t('retrospectives.viewInReport')}
                     >
-                      在报告中查看 <ExternalLink className="w-3 h-3" />
+                      {t('retrospectives.viewInReport')} <ExternalLink className="w-3 h-3" />
                     </button>
                   )}
                 </li>
@@ -354,9 +354,19 @@ export function Retrospectives({
       </section>
 
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={() => void openGeneratePreview()} disabled={generating} className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-gray-900 text-white disabled:opacity-50"><Sparkles className="w-4 h-4" />{generating ? '生成中…' : '生成复盘'}</button>
-        <button type="button" onClick={() => void handleSave()} disabled={!content.trim() || saving} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 disabled:opacity-40"><Save className="w-4 h-4" />保存记录</button>
-        <button type="button" onClick={() => void handleExport()} disabled={!content.trim()} className="text-sm px-3 py-2 rounded-lg border border-gray-200 disabled:opacity-40">导出 Markdown</button>
+        <button type="button" onClick={() => void openGeneratePreview()} disabled={generating} className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-gray-900 text-white disabled:opacity-50"><Sparkles className="w-4 h-4" />{generating ? t('common.generating') : t('retrospectives.generate')}</button>
+        <button type="button" onClick={() => void handleSave()} disabled={!content.trim() || saving} className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 disabled:opacity-40"><Save className="w-4 h-4" />{t('retrospectives.saveRecord')}</button>
+        <button type="button" onClick={() => void handleExport()} disabled={!content.trim()} className="text-sm px-3 py-2 rounded-lg border border-gray-200 disabled:opacity-40">{t('retrospectives.exportMarkdown')}</button>
+        {content.trim() && (
+          <button
+            type="button"
+            onClick={() => setEditMode(v => !v)}
+            className="inline-flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50"
+          >
+            <Pencil className="w-4 h-4" aria-hidden />
+            {editMode ? t('retrospectives.previewMarkdown') : t('retrospectives.editMarkdown')}
+          </button>
+        )}
       </div>
       {mode && (
         <p className="text-xs text-gray-500">
@@ -365,27 +375,33 @@ export function Retrospectives({
               mode === 'ai' ? 'bg-blue-100 text-blue-800' : 'bg-gray-200 text-gray-700'
             }`}
           >
-            {mode === 'ai' ? 'AI 生成' : '离线模板'}
+            {mode === 'ai' ? t('retrospectives.aiGenerated') : t('retrospectives.offlineTemplate')}
           </span>
-          {sourceIds.length > 0 && `引用 ${sourceIds.length} 条已确认资产`}
-          {usedReportIds.length > 0 && ` · 引用 ${usedReportIds.length} 份同期报告`}
+          {sourceIds.length > 0 && t('retrospectives.sourceAssets', { count: sourceIds.length })}
+          {usedReportIds.length > 0 && t('retrospectives.sourceReports', { count: usedReportIds.length })}
         </p>
       )}
       {degraded && (
         <p className="text-sm text-amber-800 bg-amber-50 rounded-lg px-3 py-2" role="status">
-          AI 调用失败，已降级为离线模板：{degraded}
+          {t('retrospectives.aiDegraded', { reason: degraded })}
         </p>
       )}
       {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2" role="alert">{error}</p>}
       {refAssets.length > 0 && (
         <details className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
           <summary className="text-sm font-medium text-gray-800 cursor-pointer">
-            引用资产（{refAssets.length}）
+            {t('retrospectives.refAssets', { count: refAssets.length })}
           </summary>
           <ul className="mt-2 space-y-1 text-xs text-gray-600">
             {refAssets.map(a => (
               <li key={a.id}>
-                [{a.assetKind}] {a.title}
+                [
+                {a.assetKind === 'outcome'
+                  ? t('workAsset.kindOutcome')
+                  : a.assetKind === 'process'
+                    ? t('workAsset.kindProcess')
+                    : t('workAsset.kindEvidence')}
+                ] {a.title}
               </li>
             ))}
           </ul>
@@ -393,11 +409,32 @@ export function Retrospectives({
       )}
       <UploadPreviewDialog
         preview={preview}
+        confirmLabel={t('retrospectives.generate')}
         onConfirm={() => void runGenerate()}
         onCancel={() => setPreview(null)}
         busy={generating}
       />
-      <textarea value={content} onChange={e => setContent(e.target.value)} rows={16} placeholder="点击「生成复盘」后在此编辑…" className="w-full text-sm font-mono rounded-xl border border-gray-200 px-4 py-3" />
+      {content.trim() ? (
+        editMode ? (
+          <textarea
+            value={content}
+            onChange={e => setContent(e.target.value)}
+            rows={18}
+            placeholder={t('retrospectives.placeholder')}
+            className="w-full text-sm font-mono rounded-xl border border-gray-200 px-4 py-3"
+          />
+        ) : (
+          <article className="bg-white rounded-xl border border-gray-200 p-6">
+            <ReportMarkdownView content={content} />
+          </article>
+        )
+      ) : (
+        <div className="text-center py-16 space-y-3 rounded-xl border border-dashed border-gray-200 bg-gray-50/50">
+          <Sparkles className="w-10 h-10 text-gray-300 mx-auto" aria-hidden />
+          <p className="text-gray-500 text-sm">{t('retrospectives.emptyHint')}</p>
+          <p className="text-xs text-gray-400">{t('retrospectives.emptyFootnote')}</p>
+        </div>
+      )}
 
       {/* 同期产出统一时间轴：日报 / 周报 / 复盘 */}
       <PeriodTimeline
@@ -410,12 +447,12 @@ export function Retrospectives({
 
       {saved.length > 0 && (
         <section className="space-y-2">
-          <h3 className="text-sm font-semibold text-gray-900">历史复盘</h3>
+          <h3 className="text-sm font-semibold text-gray-900">{t('retrospectives.history')}</h3>
           <ul className="space-y-2">
             {saved.map(r => (
               <li key={r.id} className="rounded-lg border border-gray-200 bg-white px-4 py-3 flex items-center justify-between gap-2">
-                <button type="button" onClick={() => { setContent(r.content); setSourceIds(r.sourceAssetIds); setRetroType(r.type); if (r.projectId != null) setProjectId(r.projectId) }} className="text-left text-sm text-gray-800 hover:underline min-w-0 flex-1 truncate">{r.type === 'weekly' ? '周复盘' : '阶段复盘'} · {new Date(r.dateStart).toLocaleDateString('zh-CN')}</button>
-                <button type="button" onClick={() => void handleDeleteSaved(r.id)} className="text-xs text-red-600 shrink-0">删除</button>
+                <button type="button" onClick={() => { setContent(r.content); setSourceIds(r.sourceAssetIds); setRetroType(r.type); setEditMode(false); if (r.projectId != null) setProjectId(r.projectId) }} className="text-left text-sm text-gray-800 hover:underline min-w-0 flex-1 truncate">{r.type === 'weekly' ? t('retrospectives.weeklyRetro') : t('retrospectives.phaseRetro')} · {new Date(r.dateStart).toLocaleDateString('zh-CN')}</button>
+                <button type="button" onClick={() => void handleDeleteSaved(r.id)} className="text-xs text-red-600 shrink-0">{t('common.delete')}</button>
               </li>
             ))}
           </ul>
@@ -444,6 +481,7 @@ function PeriodTimeline({
   retros,
   onJumpReport
 }: PeriodTimelineProps): JSX.Element {
+  const { t } = useTranslation()
   const items = useMemo<TimelineItem[]>(() => {
     const list: TimelineItem[] = []
     for (const r of reports) {
@@ -461,14 +499,14 @@ function PeriodTimeline({
   if (items.length === 0) {
     return (
       <section className="rounded-xl border border-dashed border-gray-200 px-4 py-3 text-xs text-gray-500">
-        同期产出时间轴：该时段尚无日报、周报或复盘。
+        {t('retrospectives.timelineEmpty')}
       </section>
     )
   }
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white px-4 py-3 space-y-2">
-      <h3 className="text-sm font-semibold text-gray-900">同期产出时间轴</h3>
+      <h3 className="text-sm font-semibold text-gray-900">{t('retrospectives.timelineTitle')}</h3>
       <ul className="space-y-1.5 text-sm">
         {items.map(it => {
           if (it.kind === 'retro') {
@@ -479,10 +517,10 @@ function PeriodTimeline({
                   {formatShortDate(it.retro.dateStart)}
                 </span>
                 <span className="text-[10px] uppercase tracking-wide text-emerald-700 bg-emerald-50 rounded px-1.5 py-0.5 shrink-0">
-                  {it.retro.type === 'weekly' ? '周复盘' : '阶段复盘'}
+                  {it.retro.type === 'weekly' ? t('retrospectives.weeklyRetro') : t('retrospectives.phaseRetro')}
                 </span>
                 <span className="truncate">
-                  {it.retro.content.split('\n')[0]?.replace(/^#+\s*/, '') || '（未命名复盘）'}
+                  {it.retro.content.split('\n')[0]?.replace(/^#+\s*/, '') || t('common.namedRetro')}
                 </span>
               </li>
             )
@@ -505,16 +543,16 @@ function PeriodTimeline({
                     : 'text-purple-700 bg-purple-50'
                 }`}
               >
-                {r.type === 'daily' ? '日报' : '周报'}
+                {r.type === 'daily' ? t('reports.daily') : t('reports.weekly')}
               </span>
-              <span className="truncate">{r.content.split('\n')[0]?.replace(/^#+\s*/, '') || '（未命名）'}</span>
+              <span className="truncate">{r.content.split('\n')[0]?.replace(/^#+\s*/, '') || t('common.unnamed')}</span>
               {onJumpReport && (
                 <button
                   type="button"
                   onClick={() => onJumpReport(r)}
                   className="ml-auto shrink-0 text-xs text-blue-600 hover:underline"
                 >
-                  打开
+                  {t('common.open')}
                 </button>
               )}
             </li>

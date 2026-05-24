@@ -1,6 +1,10 @@
 import { useCallback, useRef, useState } from 'react'
-import type { UndoToastState } from '@/components/UndoToast'
+import i18n from '@/i18n'
 
+export interface UndoToastState {
+  message: string
+  onUndo: () => void | Promise<void>
+}
 export function useUndoToast(): {
   toast: UndoToastState | null
   showUndo: (message: string, onUndo: () => void | Promise<void>) => void
@@ -27,7 +31,7 @@ export function useUndoToast(): {
           } catch (e) {
             console.error('[undo]', e)
             setToast({
-              message: '撤销失败，请重试',
+              message: i18n.t('common.undoFailed'),
               onUndo: async () => {
                 busyRef.current = false
                 await onUndo()

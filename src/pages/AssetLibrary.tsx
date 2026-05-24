@@ -1,36 +1,51 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Download, Search, Star } from 'lucide-react'
 import type { AssetKind, AssetStatus, ProjectSpace, WorkAsset } from '@/env'
 import { listProjectSpaces } from '@/lib/projectSpaces'
+import type { TimelineIntent } from '@/env'
 import { dayBounds, exportContent, listWorkAssets, updateWorkAsset } from '@/lib/workAssets'
+import { searchWorkAssetsRecall } from '@/lib/assetSearch'
 import { workAssetsToJson, workAssetsToMarkdown } from '@/lib/assetExport'
+import { recordMetric } from '@/lib/metrics'
+import { timelineIntentFromAsset } from '@/lib/timelineJump'
 import { EvidenceList } from '@/components/EvidenceList'
 
-const KIND_OPTIONS: { value: AssetKind | ''; label: string }[] = [
-  { value: '', label: '全部类型' },
-  { value: 'outcome', label: '成果' },
-  { value: 'process', label: '过程' },
-  { value: 'evidence', label: '证据' }
-]
 
-const STATUS_OPTIONS: { value: AssetStatus; label: string }[] = [
-  { value: 'confirmed', label: '已确认' },
-  { value: 'private', label: '私密' },
-  { value: 'suggested', label: '待确认' },
-  { value: 'ignored', label: '已忽略' }
-]
-
-const RANGE_DAYS = [
-  { label: '近 7 天', days: 7 },
-  { label: '近 30 天', days: 30 },
-  { label: '近 90 天', days: 90 }
-] as const
 
 interface AssetLibraryProps {
   initialProjectId?: number | null
+  onOpenTimeline?: (intent: TimelineIntent) => void
 }
 
-export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Element {
+export function AssetLibrary({ initialProjectId, onOpenTimeline }: AssetLibraryProps): JSX.Element {
+  const { t } = useTranslation()
+  const KIND_OPTIONS = useMemo(
+    (): { value: AssetKind | ''; label: string }[] => [
+      { value: '', label: t('assetLibrary.allKinds') },
+      { value: 'outcome', label: t('workAsset.kindOutcome') },
+      { value: 'process', label: t('workAsset.kindProcess') },
+      { value: 'evidence', label: t('workAsset.kindEvidence') }
+    ],
+    [t]
+  )
+  const STATUS_OPTIONS = useMemo(
+    (): { value: AssetStatus; label: string }[] => [
+      { value: 'confirmed', label: t('assetLibrary.statusConfirmed') },
+      { value: 'private', label: t('assetLibrary.statusPrivate') },
+      { value: 'suggested', label: t('assetLibrary.statusSuggested') },
+      { value: 'ignored', label: t('assetLibrary.statusIgnored') }
+    ],
+    [t]
+  )
+  const RANGE_DAYS = useMemo(
+    (): { label: string; days: number }[] => [
+      { label: t('assetLibrary.range7'), days: 7 },
+      { label: t('assetLibrary.range30'), days: 30 },
+      { label: t('assetLibrary.range90'), days: 90 }
+    ],
+    [t]
+  )
   const [spaces, setSpaces] = useState<ProjectSpace[]>([])
   const [assets, setAssets] = useState<WorkAsset[]>([])
   const [loading, setLoading] = useState(true)
@@ -75,8 +90,16 @@ export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Eleme
       }
       if (projectId !== '') filter.projectId = projectId
       if (assetKind) filter.assetKind = assetKind
-      if (searchDebounced) filter.search = searchDebounced
-      setAssets(await listWorkAssets(filter))
+      if (searchDebounced) {
+        const recalled = await searchWorkAssetsRecall(searchDebounced, { limit: 300 })
+        let filtered = recalled.items
+        if (projectId !== '') filtered = filtered.filter(a => a.projectId === projectId)
+        filtered = filtered.filter(a => a.status === status)
+        if (assetKind) filtered = filtered.filter(a => a.assetKind === assetKind)
+        setAssets(filtered)
+      } else {
+        setAssets(await listWorkAssets(filter))
+      }
     } finally {
       setLoading(false)
     }
@@ -104,9 +127,7 @@ export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Eleme
   }
 
   const confirmExport = (count: number): boolean => {
-    return confirm(
-      `将导出 ${count} 条资产（含标题、补充说明与证据摘要）。请勿将含敏感信息的导出文件分享给他人。继续？`
-    )
+    return confirm(t('assetLibrary.exportConfirm', { count }))
   }
 
   const handleExportMd = async (): Promise<void> => {
@@ -123,8 +144,8 @@ export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Eleme
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-semibold text-gray-900">资产库</h2>
-        <p className="text-sm text-gray-500 mt-1">浏览、检索与导出已沉淀的工作资产</p>
+        <h2 className="text-lg font-semibold text-gray-900">{t('assetLibrary.title')}</h2>
+        <p className="text-sm text-gray-500 mt-1">{t('assetLibrary.subtitle')}</p>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -149,9 +170,9 @@ export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Eleme
           value={projectId}
           onChange={e => setProjectId(e.target.value === '' ? '' : Number(e.target.value))}
           className="text-sm rounded-lg border border-gray-200 px-3 py-2"
-          aria-label="项目筛选"
+          aria-label={t('assetLibrary.filterProject')}
         >
-          <option value="">全部项目</option>
+          <option value="">{t('assetLibrary.allProjects')}</option>
           {spaces.map(s => (
             <option key={s.id} value={s.id}>
               {s.name}
@@ -162,7 +183,7 @@ export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Eleme
           value={status}
           onChange={e => setStatus(e.target.value as AssetStatus)}
           className="text-sm rounded-lg border border-gray-200 px-3 py-2"
-          aria-label="状态筛选"
+          aria-label={t('assetLibrary.filterStatus')}
         >
           {STATUS_OPTIONS.map(o => (
             <option key={o.value} value={o.value}>
@@ -174,7 +195,7 @@ export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Eleme
           value={assetKind}
           onChange={e => setAssetKind(e.target.value as AssetKind | '')}
           className="text-sm rounded-lg border border-gray-200 px-3 py-2"
-          aria-label="类型筛选"
+          aria-label={t('assetLibrary.filterKind')}
         >
           {KIND_OPTIONS.map(o => (
             <option key={o.value || 'all'} value={o.value}>
@@ -188,7 +209,7 @@ export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Eleme
             type="search"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="搜索标题、补充、影响…"
+            placeholder={t('assetLibrary.searchPlaceholder')}
             className="w-full text-sm rounded-lg border border-gray-200 pl-9 pr-3 py-2"
           />
         </div>
@@ -202,7 +223,7 @@ export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Eleme
           className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 disabled:opacity-40"
         >
           <Download className="w-4 h-4" />
-          导出 Markdown
+          {t('assetLibrary.exportMarkdown')}
         </button>
         <button
           type="button"
@@ -211,7 +232,7 @@ export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Eleme
           className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-gray-200 disabled:opacity-40"
         >
           <Download className="w-4 h-4" />
-          导出 JSON
+          {t('assetLibrary.exportJson')}
         </button>
       </div>
 
@@ -222,14 +243,14 @@ export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Eleme
           ))}
         </div>
       ) : assets.length === 0 ? (
-        <p className="text-sm text-gray-500 py-8 text-center">没有匹配的资产</p>
+        <p className="text-sm text-gray-500 py-8 text-center">{t('assetLibrary.noMatch')}</p>
       ) : (
         <ul className="space-y-2">
           {assets.map(asset => {
             const project =
               asset.projectId != null
-                ? projectById.get(asset.projectId)?.name ?? '未知'
-                : '未归类'
+                ? projectById.get(asset.projectId)?.name ?? t('common.unknown')
+                : t('common.unassigned')
             const expanded = expandedId === asset.id
             const editing = editingId === asset.id
             return (
@@ -241,11 +262,15 @@ export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Eleme
                         {project}
                       </span>
                       <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
-                        {asset.assetKind}
+                        {asset.assetKind === 'outcome'
+                          ? t('workAsset.kindOutcome')
+                          : asset.assetKind === 'process'
+                            ? t('workAsset.kindProcess')
+                            : t('workAsset.kindEvidence')}
                       </span>
                       {asset.tags.includes('important') && (
                         <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
-                          重要
+                          {t('common.important')}
                         </span>
                       )}
                     </div>
@@ -259,7 +284,11 @@ export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Eleme
                         ? 'text-amber-600 bg-amber-50'
                         : 'text-gray-400 hover:bg-gray-100'
                     }`}
-                    aria-label={asset.tags.includes('important') ? '取消重要' : '标为重要'}
+                    aria-label={
+                      asset.tags.includes('important')
+                        ? t('assetLibrary.unmarkImportant')
+                        : t('assetLibrary.markImportant')
+                    }
                   >
                     <Star
                       className="w-4 h-4"
@@ -271,14 +300,16 @@ export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Eleme
                   <p className="text-xs text-gray-600 mt-2">{asset.description}</p>
                 )}
                 {!editing && asset.impact && (
-                  <p className="text-xs text-gray-500 mt-1">影响：{asset.impact}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {t('assetLibrary.impact', { text: asset.impact })}
+                  </p>
                 )}
                 {editing && (
                   <div className="mt-3 space-y-2">
                     <textarea
                       value={editDesc}
                       onChange={e => setEditDesc(e.target.value)}
-                      placeholder="补充说明"
+                      placeholder={t('assetLibrary.placeholderNote')}
                       rows={2}
                       className="w-full text-xs rounded-lg border border-gray-200 px-3 py-2"
                     />
@@ -286,7 +317,7 @@ export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Eleme
                       type="text"
                       value={editImpact}
                       onChange={e => setEditImpact(e.target.value)}
-                      placeholder="影响 / 价值"
+                      placeholder={t('assetLibrary.placeholderImpact')}
                       className="w-full text-xs rounded-lg border border-gray-200 px-3 py-2"
                     />
                     <div className="flex gap-2">
@@ -295,14 +326,14 @@ export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Eleme
                         onClick={() => void saveEdits(asset.id)}
                         className="text-xs px-3 py-1.5 rounded-lg bg-gray-900 text-white"
                       >
-                        保存
+                        {t('common.save')}
                       </button>
                       <button
                         type="button"
                         onClick={() => setEditingId(null)}
                         className="text-xs px-3 py-1.5 rounded-lg border border-gray-200"
                       >
-                        取消
+                        {t('common.cancel')}
                       </button>
                     </div>
                   </div>
@@ -310,11 +341,34 @@ export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Eleme
                 <div className="flex flex-wrap gap-2 mt-3">
                   <button
                     type="button"
-                    onClick={() => setExpandedId(expanded ? null : asset.id)}
+                    onClick={() => {
+                      const next = expanded ? null : asset.id
+                      setExpandedId(next)
+                      if (next != null) void recordMetric('asset_evidence_expanded', { assetId: asset.id })
+                    }}
                     className="text-xs text-blue-600 hover:underline"
                   >
-                    {expanded ? '收起证据' : '查看证据'}
+                    {expanded
+                      ? t('workAsset.collapseEvidence')
+                      : t('workAsset.expandEvidence', { count: asset.evidence.length })}
                   </button>
+                  {onOpenTimeline &&
+                    (asset.startedAt != null ||
+                      asset.evidence.some(e => e.activityLogId != null || e.startedAt != null)) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void recordMetric('asset_timeline_jumped', {
+                            assetId: asset.id,
+                            startedAt: asset.startedAt ?? asset.createdAt
+                          })
+                          onOpenTimeline(timelineIntentFromAsset(asset))
+                        }}
+                        className="text-xs text-indigo-600 hover:underline"
+                      >
+                        {t('workAsset.jumpTimeline')}
+                      </button>
+                    )}
                   {!editing && (
                     <button
                       type="button"
@@ -325,7 +379,7 @@ export function AssetLibrary({ initialProjectId }: AssetLibraryProps): JSX.Eleme
                       }}
                       className="text-xs text-gray-600 hover:underline"
                     >
-                      编辑
+                      {t('common.edit')}
                     </button>
                   )}
                 </div>

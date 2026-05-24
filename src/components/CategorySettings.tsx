@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Plus, X, ChevronDown, ChevronRight } from 'lucide-react'
 
 const CATEGORY_ORDER: string[] = [
@@ -6,17 +7,7 @@ const CATEGORY_ORDER: string[] = [
   'communication', 'meeting', 'file_manager', 'other'
 ]
 
-const CATEGORY_LABELS: Record<string, string> = {
-  code_editor: '编码',
-  terminal: '终端',
-  browser: '浏览器',
-  design: '设计',
-  docs: '文档',
-  communication: '沟通',
-  meeting: '会议',
-  file_manager: '文件',
-  other: '其他'
-}
+
 
 interface CategorySettingsProps {
   settings: Record<string, string>
@@ -46,6 +37,8 @@ export function CategorySettings({
   settings,
   updateSetting
 }: CategorySettingsProps): JSX.Element {
+  const { t } = useTranslation()
+  const categoryLabel = useCallback((cat: string) => t(`category.${cat}`), [t])
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [newProc, setNewProc] = useState('')
   const [newCat, setNewCat] = useState('code_editor')
@@ -109,8 +102,8 @@ export function CategorySettings({
   if (loading) {
     return (
       <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">进程分类</h2>
-        <p className="text-sm text-gray-400">加载中...</p>
+        <h2 className="text-lg font-semibold text-gray-900">{t('categorySettings.title')}</h2>
+        <p className="text-sm text-gray-400">{t('common.loadingShort')}</p>
       </section>
     )
   }
@@ -118,10 +111,8 @@ export function CategorySettings({
   return (
     <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
       <div>
-        <h2 className="text-lg font-semibold text-gray-900">进程分类</h2>
-        <p className="text-sm text-gray-500 mt-1">
-          管理进程名到活动分类的映射，新增或删除进程名后自动生效
-        </p>
+        <h2 className="text-lg font-semibold text-gray-900">{t('categorySettings.title')}</h2>
+        <p className="text-sm text-gray-500 mt-1">{t('categorySettings.subtitle')}</p>
       </div>
 
       {/* 添加进程 */}
@@ -131,7 +122,7 @@ export function CategorySettings({
           value={newProc}
           onChange={e => setNewProc(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') void addProcess() }}
-          placeholder="进程名，如 figma"
+          placeholder={t('categorySettings.addPlaceholder')}
           className="flex-1 min-w-[160px] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <select
@@ -140,7 +131,7 @@ export function CategorySettings({
           className="rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {CATEGORY_ORDER.map(cat => (
-            <option key={cat} value={cat}>{CATEGORY_LABELS[cat] ?? cat}</option>
+            <option key={cat} value={cat}>{categoryLabel(cat)}</option>
           ))}
         </select>
         <button
@@ -149,7 +140,7 @@ export function CategorySettings({
           className="inline-flex items-center gap-1 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm hover:bg-gray-800"
         >
           <Plus className="w-4 h-4" />
-          添加
+          {t('common.add')}
         </button>
       </div>
 
@@ -171,14 +162,16 @@ export function CategorySettings({
                   <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
                 )}
                 <span className="text-sm font-medium text-gray-800">
-                  {CATEGORY_LABELS[cat] ?? cat}
+                  {categoryLabel(cat)}
                 </span>
-                <span className="text-xs text-gray-400">{procs.length} 个进程</span>
+                <span className="text-xs text-gray-400">
+                  {t('categorySettings.processCount', { count: procs.length })}
+                </span>
               </button>
               {isExpanded && (
                 <div className="px-3 pb-3 pt-1 flex flex-wrap gap-1.5">
                   {procs.length === 0 && (
-                    <p className="text-xs text-gray-400 px-1">暂无进程，在上方添加</p>
+                    <p className="text-xs text-gray-400 px-1">{t('categorySettings.noProcesses')}</p>
                   )}
                   {procs.map(proc => (
                     <span
@@ -190,7 +183,7 @@ export function CategorySettings({
                         type="button"
                         onClick={() => void removeProcess(cat, proc)}
                         className="text-gray-400 hover:text-red-500 transition-colors"
-                        aria-label={`移除 ${proc}`}
+                        aria-label={`${t('common.remove')} ${proc}`}
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -204,7 +197,7 @@ export function CategorySettings({
       </div>
 
       <p className="text-xs text-gray-400">
-        修改后进程监听器自动重载，新增的分类规则将在下一次采样时生效
+        {t('categorySettings.footer')}
       </p>
     </section>
   )

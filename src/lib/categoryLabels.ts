@@ -1,16 +1,5 @@
 import type { ActivityCategory } from '@/env'
-
-export const CATEGORY_LABELS: Record<ActivityCategory, string> = {
-  code_editor: '编码',
-  terminal: '终端',
-  browser: '浏览器',
-  design: '设计',
-  docs: '文档',
-  communication: '沟通',
-  meeting: '会议',
-  file_manager: '文件',
-  other: '其他'
-}
+import i18n from '@/i18n'
 
 export const CATEGORY_COLORS: Record<ActivityCategory, string> = {
   code_editor: 'bg-violet-100 text-violet-800',
@@ -25,8 +14,9 @@ export const CATEGORY_COLORS: Record<ActivityCategory, string> = {
 }
 
 export function getCategoryLabel(category: ActivityCategory | null | undefined): string {
-  if (!category) return '其他'
-  return CATEGORY_LABELS[category] ?? '其他'
+  if (!category) return i18n.t('category.other')
+  const key = `category.${category}` as const
+  return i18n.t(key, { defaultValue: i18n.t('category.other') })
 }
 
 export function getCategoryColor(category: ActivityCategory | null | undefined): string {

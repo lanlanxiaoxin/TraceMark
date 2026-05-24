@@ -114,7 +114,7 @@ export function buildOfflineGroupedByProject(logs: ActivityLogRow[]): string {
   return lines.join('\n').trimEnd()
 }
 
-function buildLocalActivitySummaryLine(
+export function buildLocalActivitySummaryLine(
   category: ActivityCategory,
   project: string | null,
   file: string | null,

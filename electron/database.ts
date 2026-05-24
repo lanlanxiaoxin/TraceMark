@@ -1,22 +1,27 @@
 import Database from 'better-sqlite3'
 import { app } from 'electron'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { existsSync, mkdirSync } from 'fs'
+import { initRecallSearch } from './asset-search'
 
 let db: Database.Database | null = null
+
+/** 指定路径初始化 SQLite（供 smoke / 单测，不依赖 Electron app）。 */
+export function initDatabaseAtPath(dbPath: string): void {
+  closeDatabase()
+  const dbDir = dirname(dbPath)
+  if (!existsSync(dbDir)) {
+    mkdirSync(dbDir, { recursive: true })
+  }
+  db = new Database(dbPath)
+  db.pragma('journal_mode = WAL')
+  createTables()
+}
 
 export function initDatabase(): void {
   const userDataPath = app.getPath('userData')
   const dbDir = join(userDataPath, 'data')
-
-  if (!existsSync(dbDir)) {
-    mkdirSync(dbDir, { recursive: true })
-  }
-
-  const dbPath = join(dbDir, 'workflow-ai.db')
-  db = new Database(dbPath)
-  db.pragma('journal_mode = WAL')
-  createTables()
+  initDatabaseAtPath(join(dbDir, 'workflow-ai.db'))
 }
 
 function createTables(): void {
@@ -77,6 +82,8 @@ function createTables(): void {
   migrateLegacyAiSettings()
   migratePro50Tables()
   migrateLocalMetricsTable()
+  migrateDailySealsTable()
+  initRecallSearch()
 
   const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)')
   insertSetting.run('process_monitoring_enabled', 'true')
@@ -96,7 +103,7 @@ function createTables(): void {
   insertSetting.run('daily_reminder_enabled', 'true')
   insertSetting.run('friday_reminder_enabled', 'true')
   insertSetting.run('daily_reminder_time', '18:00')
-  insertSetting.run('friday_reminder_time', '16:00')
+  insertSetting.run('friday_reminder_time', '17:00')
   insertSetting.run('daily_narrative_use_ai', 'false')
 }
 
@@ -221,6 +228,29 @@ function migratePro50Tables(): void {
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
+  `)
+}
+
+function migrateDailySealsTable(): void {
+  if (!db) return
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS daily_seals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date_ms INTEGER NOT NULL UNIQUE,
+      project_id INTEGER REFERENCES project_spaces(id),
+      project_name TEXT,
+      parsed_project_label TEXT,
+      task_hint TEXT,
+      note TEXT,
+      skipped_mainline INTEGER DEFAULT 0,
+      evidence_suggested INTEGER DEFAULT 0,
+      evidence_archived INTEGER DEFAULT 0,
+      evidence_dismissed INTEGER DEFAULT 0,
+      completed_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_daily_seals_date ON daily_seals(date_ms);
   `)
 }
 

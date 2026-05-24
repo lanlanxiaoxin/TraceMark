@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useCallback, useEffect, useState } from 'react'
 import { RefreshCw, Sparkles, Wand2 } from 'lucide-react'
 import type { UploadPreview } from '@/env'
@@ -11,6 +12,7 @@ interface DailyNarrativeCardProps {
 }
 
 export function DailyNarrativeCard({ dateMs }: DailyNarrativeCardProps): JSX.Element {
+  const { t } = useTranslation()
   const { settings, updateSetting, loading: settingsLoading } = useSettings()
   const useAiPreferred = settings.daily_narrative_use_ai === 'true'
 
@@ -27,8 +29,8 @@ export function DailyNarrativeCard({ dateMs }: DailyNarrativeCardProps): JSX.Ele
     setDegraded(null)
     setLastMode('offline')
     try {
-      const t = await getDailyNarrative(dateMs)
-      setFullText(t)
+      const narrative = await getDailyNarrative(dateMs)
+      setFullText(narrative)
     } finally {
       setLoadingText(false)
     }
@@ -56,7 +58,7 @@ export function DailyNarrativeCard({ dateMs }: DailyNarrativeCardProps): JSX.Ele
     try {
       setPreview(await buildDailyNarrativeUploadPreview(dateMs))
     } catch (e) {
-      setDegraded(e instanceof Error ? e.message : '无法加载上传预览')
+      setDegraded(e instanceof Error ? e.message : t('dailyNarrative.errPreview'))
     }
   }
 
@@ -72,7 +74,7 @@ export function DailyNarrativeCard({ dateMs }: DailyNarrativeCardProps): JSX.Ele
         setDegraded(res.degradationReason)
       }
     } catch (e) {
-      setDegraded(e instanceof Error ? e.message : '生成失败')
+      setDegraded(e instanceof Error ? e.message : t('common.errGenerate'))
     } finally {
       setBusyAi(false)
     }
@@ -97,15 +99,15 @@ export function DailyNarrativeCard({ dateMs }: DailyNarrativeCardProps): JSX.Ele
     <>
       <section
         className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50/90 to-white p-4 space-y-3 shadow-sm"
-        aria-label="今日叙事"
+        aria-label={t('dailyNarrative.aria')}
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 text-sm font-semibold text-indigo-900">
             <Sparkles className="w-4 h-4 shrink-0 text-indigo-600" aria-hidden />
-            今日叙事
+            {t('dailyNarrative.title')}
           </div>
           <span className="text-[10px] font-medium uppercase tracking-wide text-indigo-700/80">
-            {lastMode === 'ai' ? 'AI 润色' : '离线规则'}
+            {lastMode === 'ai' ? t('dailyNarrative.modeAi') : t('dailyNarrative.modeOffline')}
           </span>
         </div>
 
@@ -117,7 +119,7 @@ export function DailyNarrativeCard({ dateMs }: DailyNarrativeCardProps): JSX.Ele
               !useAiPreferred ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-800'
             }`}
           >
-            离线规则
+            {t('dailyNarrative.modeOffline')}
           </button>
           <button
             type="button"
@@ -126,12 +128,12 @@ export function DailyNarrativeCard({ dateMs }: DailyNarrativeCardProps): JSX.Ele
               useAiPreferred ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-800'
             }`}
           >
-            AI 润色
+            {t('dailyNarrative.modeAi')}
           </button>
         </div>
 
         {loadingText ? (
-          <p className="text-xs text-gray-500 animate-pulse">正在聚合今日活动…</p>
+          <p className="text-xs text-gray-500 animate-pulse">{t('dailyNarrative.aggregating')}</p>
         ) : (
           <p className="text-sm text-gray-800 leading-relaxed min-h-[4.5rem] whitespace-pre-wrap">
             {displayed}
@@ -155,7 +157,7 @@ export function DailyNarrativeCard({ dateMs }: DailyNarrativeCardProps): JSX.Ele
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loadingText ? 'animate-spin' : ''}`} />
-            刷新离线叙事
+            {t('dailyNarrative.refreshOffline')}
           </button>
           {useAiPreferred && (
             <button
@@ -165,19 +167,17 @@ export function DailyNarrativeCard({ dateMs }: DailyNarrativeCardProps): JSX.Ele
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40"
             >
               <Wand2 className="w-3.5 h-3.5" />
-              上传预览并生成
+              {t('dailyNarrative.uploadPreviewGenerate')}
             </button>
           )}
         </div>
 
-        <p className="text-[10px] text-gray-400">
-          离线模式仅本地统计；AI 模式需先在设置中允许，并每次经上传预览确认后再请求模型。也可在「设置 → 今日叙事」关闭 AI 开关。
-        </p>
+        <p className="text-[10px] text-gray-400">{t('dailyNarrative.footnote')}</p>
       </section>
 
       <UploadPreviewDialog
         preview={preview}
-        confirmLabel="确认并调用 AI 润色"
+        confirmLabel={t('dailyNarrative.confirmAi')}
         onConfirm={() => void runAiGenerate()}
         onCancel={() => setPreview(null)}
         busy={busyAi}
