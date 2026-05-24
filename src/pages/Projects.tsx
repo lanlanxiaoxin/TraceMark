@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
-import type { ProjectSpace, WorkAsset } from '@/env'
+import type { ProjectSpace, TimelineIntent, WorkAsset } from '@/env'
 import {
   createProjectSpace,
   deleteProjectSpace,
@@ -8,6 +9,10 @@ import {
   updateProjectSpace
 } from '@/lib/projectSpaces'
 import { ProjectSpaceForm, saveProjectAliases } from '@/components/ProjectSpaceForm'
+import {
+  ProjectSpaceWizard,
+  type ProjectWizardSaveData
+} from '@/components/ProjectSpaceWizard'
 import { countWorkAssetsByProject, listWorkAssets, dayBounds } from '@/lib/workAssets'
 import { EvidenceList } from '@/components/EvidenceList'
 import { AssetLibrary } from '@/pages/AssetLibrary'
@@ -36,6 +41,7 @@ interface ProjectsProps {
   intent?: ProjectsIntent
   onIntentConsumed?: () => void
   onOpenReports?: (intent: ReportJumpRequest) => void
+  onOpenTimeline?: (intent: TimelineIntent) => void
 }
 
 interface FormSaveData {
@@ -52,19 +58,28 @@ interface FormSaveData {
   nameAliases: string
 }
 
-const VIEW_TABS: { id: ProjectView; label: string }[] = [
-  { id: 'spaces', label: '项目空间' },
-  { id: 'library', label: '资产库' },
-  { id: 'retro', label: '复盘' }
-]
-
-export function Projects({ intent, onIntentConsumed, onOpenReports }: ProjectsProps): JSX.Element {
+export function Projects({
+  intent,
+  onIntentConsumed,
+  onOpenReports,
+  onOpenTimeline
+}: ProjectsProps): JSX.Element {
+  const { t } = useTranslation()
+  const viewTabs = useMemo(
+    () => [
+      { id: 'spaces' as const, label: t('projects.tabSpaces') },
+      { id: 'library' as const, label: t('projects.tabLibrary') },
+      { id: 'retro' as const, label: t('projects.tabRetro') }
+    ],
+    [t]
+  )
   const [view, setView] = useState<ProjectView>(intent?.tab ?? 'spaces')
   const [spaces, setSpaces] = useState<ProjectSpace[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<ProjectSpace | 'new' | null>(null)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [confirmedAssets, setConfirmedAssets] = useState<WorkAsset[]>([])
+  const [useAdvancedCreate, setUseAdvancedCreate] = useState(false)
   const [retroPrefill, setRetroPrefill] = useState<{
     type?: 'weekly' | 'project_phase'
     weekStartMs?: number
@@ -129,25 +144,29 @@ export function Projects({ intent, onIntentConsumed, onOpenReports }: ProjectsPr
     }).then(setConfirmedAssets)
   }, [selectedId])
 
-  const handleSave = async (data: FormSaveData): Promise<void> => {
+  const handleSave = async (data: FormSaveData | ProjectWizardSaveData): Promise<void> => {
+    const privacyAlias = 'privacyAlias' in data ? data.privacyAlias : undefined
+    const description = 'description' in data ? data.description : undefined
+
     if (editing === 'new') {
       const created = await createProjectSpace({
         name: data.name,
-        privacyAlias: data.privacyAlias,
-        description: data.description,
+        privacyAlias,
+        description,
         roleTemplate: data.roleTemplate ?? undefined
       })
       await saveProjectAliases(created.id, data)
     } else if (editing) {
       await updateProjectSpace(editing.id, {
         name: data.name,
-        privacyAlias: data.privacyAlias ?? null,
-        description: data.description ?? null,
+        privacyAlias: privacyAlias ?? null,
+        description: description ?? null,
         roleTemplate: data.roleTemplate ?? null
       })
       await saveProjectAliases(editing.id, data)
     }
     setEditing(null)
+    setUseAdvancedCreate(false)
     await load()
   }
 
@@ -155,8 +174,8 @@ export function Projects({ intent, onIntentConsumed, onOpenReports }: ProjectsPr
     const assetCount = await countWorkAssetsByProject(id)
     const msg =
       assetCount > 0
-        ? `确定删除此项目空间？将同时删除关联的 ${assetCount} 条工作资产、复盘与摘要记录。`
-        : '确定删除此项目空间？'
+        ? t('projects.deleteConfirmWithAssets', { count: assetCount })
+        : t('projects.deleteConfirm')
     if (!confirm(msg)) return
     await deleteProjectSpace(id)
     if (selectedId === id) setSelectedId(null)
@@ -164,16 +183,34 @@ export function Projects({ intent, onIntentConsumed, onOpenReports }: ProjectsPr
   }
 
   if (editing) {
+    const isNew = editing === 'new'
     return (
       <div className="max-w-xl mx-auto p-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">
-          {editing === 'new' ? '新建项目空间' : '编辑项目空间'}
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">
+          {isNew ? t('projects.newSpace') : t('projects.editSpace')}
         </h1>
-        <ProjectSpaceForm
-          space={editing === 'new' ? null : editing}
-          onSave={handleSave}
-          onCancel={() => setEditing(null)}
-        />
+        {isNew && !useAdvancedCreate && (
+          <p className="text-sm text-gray-500 mb-6">{t('projects.wizardHint')}</p>
+        )}
+        {isNew && !useAdvancedCreate ? (
+          <ProjectSpaceWizard
+            onSave={handleSave}
+            onCancel={() => {
+              setEditing(null)
+              setUseAdvancedCreate(false)
+            }}
+            onOpenAdvanced={() => setUseAdvancedCreate(true)}
+          />
+        ) : (
+          <ProjectSpaceForm
+            space={isNew ? null : editing}
+            onSave={handleSave}
+            onCancel={() => {
+              setEditing(null)
+              setUseAdvancedCreate(false)
+            }}
+          />
+        )}
       </div>
     )
   }
@@ -182,23 +219,26 @@ export function Projects({ intent, onIntentConsumed, onOpenReports }: ProjectsPr
     <div className="max-w-2xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">项目</h1>
-          <p className="text-sm text-gray-500 mt-1">项目空间、资产库与复盘</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('nav.projects')}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t('commandPalette.projectsSecondary')}</p>
         </div>
         {view === 'spaces' && (
           <button
             type="button"
-            onClick={() => setEditing('new')}
+            onClick={() => {
+              setUseAdvancedCreate(false)
+              setEditing('new')
+            }}
             className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg bg-gray-900 text-white shrink-0"
           >
             <Plus className="w-4 h-4" />
-            新建
+            {t('common.new')}
           </button>
         )}
       </div>
 
-      <div className="flex gap-1 p-1 rounded-xl bg-gray-100" role="tablist" aria-label="项目子页面">
-        {VIEW_TABS.map(tab => (
+      <div className="flex gap-1 p-1 rounded-xl bg-gray-100" role="tablist" aria-label={t('projects.subNav')}>
+        {viewTabs.map(tab => (
           <button
             key={tab.id}
             type="button"
@@ -214,7 +254,9 @@ export function Projects({ intent, onIntentConsumed, onOpenReports }: ProjectsPr
         ))}
       </div>
 
-      {view === 'library' && <AssetLibrary initialProjectId={selectedId} />}
+      {view === 'library' && (
+        <AssetLibrary initialProjectId={selectedId} onOpenTimeline={onOpenTimeline} />
+      )}
       {view === 'retro' && (
         <Retrospectives
           initialProjectId={selectedId}
@@ -236,14 +278,18 @@ export function Projects({ intent, onIntentConsumed, onOpenReports }: ProjectsPr
               ))}
             </div>
           ) : spaces.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center">
-              <p className="text-gray-600 mb-4">还没有项目空间</p>
+            <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center space-y-3">
+              <p className="text-gray-600">{t('projects.emptyTitle')}</p>
+              <p className="text-sm text-gray-500">{t('projects.emptyBody')}</p>
               <button
                 type="button"
-                onClick={() => setEditing('new')}
-                className="text-sm font-medium text-blue-600 hover:underline"
+                onClick={() => {
+                  setUseAdvancedCreate(false)
+                  setEditing('new')
+                }}
+                className="inline-flex px-4 py-2 text-sm font-medium rounded-lg bg-gray-900 text-white"
               >
-                创建第一个项目
+                {t('projects.emptyCta')}
               </button>
             </div>
           ) : (
@@ -263,7 +309,7 @@ export function Projects({ intent, onIntentConsumed, onOpenReports }: ProjectsPr
                       <h2 className="font-medium text-gray-900">{space.name}</h2>
                       {space.privacyAlias && (
                         <p className="text-xs text-gray-500 mt-0.5">
-                          隐私别名：{space.privacyAlias}
+                          {t('projects.privacyAlias', { alias: space.privacyAlias })}
                         </p>
                       )}
                     </div>
@@ -272,7 +318,7 @@ export function Projects({ intent, onIntentConsumed, onOpenReports }: ProjectsPr
                         type="button"
                         onClick={() => setEditing(space)}
                         className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"
-                        aria-label="编辑"
+                        aria-label={t('projects.edit')}
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
@@ -280,7 +326,7 @@ export function Projects({ intent, onIntentConsumed, onOpenReports }: ProjectsPr
                         type="button"
                         onClick={() => void handleDelete(space.id)}
                         className="p-2 rounded-lg text-gray-500 hover:bg-red-50 hover:text-red-600"
-                        aria-label="删除"
+                        aria-label={t('projects.delete')}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -293,7 +339,7 @@ export function Projects({ intent, onIntentConsumed, onOpenReports }: ProjectsPr
 
           {selectedId != null && confirmedAssets.length > 0 && (
             <section className="space-y-3">
-              <h2 className="text-lg font-semibold text-gray-900">近期已确认资产</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t('projects.recentAssets')}</h2>
               {confirmedAssets.map(asset => (
                 <article key={asset.id} className="rounded-xl border border-gray-200 bg-white p-4">
                   <h3 className="text-sm font-medium text-gray-900">{asset.title}</h3>

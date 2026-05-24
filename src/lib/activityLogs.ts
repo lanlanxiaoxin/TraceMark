@@ -1,4 +1,6 @@
 import type { ActivityLog, ListActivityLogsOptions, ListActivityLogsResult } from '@/env'
+import i18n from '@/i18n'
+import { getDateLocaleTag } from '@/i18n'
 
 export type { ActivityLog, ListActivityLogsOptions, ListActivityLogsResult }
 
@@ -47,10 +49,10 @@ export function formatDayLabel(ts: number): string {
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate()
 
-  if (sameDay(d, today)) return '今天'
-  if (sameDay(d, yesterday)) return '昨天'
+  if (sameDay(d, today)) return i18n.t('common.today')
+  if (sameDay(d, yesterday)) return i18n.t('common.yesterday')
 
-  return d.toLocaleDateString('zh-CN', {
+  return d.toLocaleDateString(getDateLocaleTag(), {
     month: 'long',
     day: 'numeric',
     weekday: 'short'
@@ -58,7 +60,7 @@ export function formatDayLabel(ts: number): string {
 }
 
 export function formatTime(ts: number): string {
-  return new Date(ts).toLocaleTimeString('zh-CN', {
+  return new Date(ts).toLocaleTimeString(getDateLocaleTag(), {
     hour: '2-digit',
     minute: '2-digit'
   })
@@ -66,10 +68,12 @@ export function formatTime(ts: number): string {
 
 export function formatDuration(startedAt: number, endedAt: number): string {
   const seconds = Math.max(0, Math.round((endedAt - startedAt) / 1000))
-  if (seconds < 60) return `${seconds} 秒`
+  if (seconds < 60) return i18n.t('timeline.durationSeconds', { seconds })
   const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes} 分钟`
+  if (minutes < 60) return i18n.t('timeline.durationMinutes', { minutes })
   const hours = Math.floor(minutes / 60)
   const remainMinutes = minutes % 60
-  return remainMinutes > 0 ? `${hours} 小时 ${remainMinutes} 分` : `${hours} 小时`
+  return remainMinutes > 0
+    ? i18n.t('timeline.durationHoursMinutes', { hours, minutes: remainMinutes })
+    : i18n.t('timeline.durationHours', { hours })
 }

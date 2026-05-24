@@ -1,7 +1,7 @@
-; 自定义 NSIS：安装目录未包含应用名时自动追加 ${APP_FILENAME}（TraceMack）
+; 自定义 NSIS：安装目录未包含应用名时自动追加 ${APP_FILENAME}（TraceMark）
 
 ; 栈：haystack, needle → 栈顶 1=包含，0=不包含
-Function TraceMack_Contains
+Function TraceMark_Contains
   Exch $R1
   Exch
   Exch $R0
@@ -12,18 +12,18 @@ Function TraceMack_Contains
   StrCpy $R2 -1
   StrLen $R3 $R1
   StrLen $R4 $R0
-  traceMack_loop:
+  TraceMark_loop:
     IntOp $R2 $R2 + 1
     StrCpy $R5 $R0 $R3 $R2
-    StrCmp $R5 $R1 traceMack_found
-    StrCmp $R2 $R4 traceMack_notfound
-    Goto traceMack_loop
-  traceMack_found:
+    StrCmp $R5 $R1 TraceMark_found
+    StrCmp $R2 $R4 TraceMark_notfound
+    Goto TraceMark_loop
+  TraceMark_found:
     StrCpy $R0 1
-    Goto traceMack_end
-  traceMack_notfound:
+    Goto TraceMark_end
+  TraceMark_notfound:
     StrCpy $R0 0
-  traceMack_end:
+  TraceMark_end:
     Pop $R5
     Pop $R4
     Pop $R3
@@ -33,71 +33,71 @@ Function TraceMack_Contains
 FunctionEnd
 
 ; 返回栈顶 1=路径已含应用名，0=需要追加子目录
-Function TraceMack_InstDirHasAppFolder
+Function TraceMark_InstDirHasAppFolder
   Push $R0
   Push $R1
 
   Push "${APP_FILENAME}"
   Push $INSTDIR
-  Call TraceMack_Contains
+  Call TraceMark_Contains
   Pop $R1
-  IntCmp $R1 1 traceMack_found
-
-  Push "TraceMack"
-  Push $INSTDIR
-  Call TraceMack_Contains
-  Pop $R1
-  IntCmp $R1 1 traceMack_found
+  IntCmp $R1 1 TraceMark_found
 
   Push "TraceMark"
   Push $INSTDIR
-  Call TraceMack_Contains
+  Call TraceMark_Contains
   Pop $R1
-  IntCmp $R1 1 traceMack_found
+  IntCmp $R1 1 TraceMark_found
 
-  Push "tracemack"
+  Push "TraceMark"
   Push $INSTDIR
-  Call TraceMack_Contains
+  Call TraceMark_Contains
   Pop $R1
-  IntCmp $R1 1 traceMack_found
+  IntCmp $R1 1 TraceMark_found
+
+  Push "TraceMark"
+  Push $INSTDIR
+  Call TraceMark_Contains
+  Pop $R1
+  IntCmp $R1 1 TraceMark_found
 
   Push "tracemark"
   Push $INSTDIR
-  Call TraceMack_Contains
+  Call TraceMark_Contains
   Pop $R1
-  IntCmp $R1 1 traceMack_found
+  IntCmp $R1 1 TraceMark_found
 
   StrCpy $R0 0
-  Goto traceMack_done
+  Goto TraceMark_done
 
-  traceMack_found:
+  TraceMark_found:
   StrCpy $R0 1
 
-  traceMack_done:
+  TraceMark_done:
   Exch $R0
   Pop $R1
 FunctionEnd
 
-Function TraceMack_EnsureInstSubdir
+Function TraceMark_EnsureInstSubdir
   Push $0
   Push $1
   StrLen $1 $INSTDIR
-  IntCmp $1 0 traceMack_skip_trim
+  IntCmp $1 0 TraceMark_skip_trim
   StrCpy $0 $INSTDIR 1 -1
-  StrCmp $0 "\" 0 traceMack_skip_trim
+  StrCmp $0 "\" 0 TraceMark_skip_trim
   IntOp $1 $1 - 1
   StrCpy $INSTDIR $INSTDIR $1
-  traceMack_skip_trim:
+  TraceMark_skip_trim:
   Pop $1
   Pop $0
 
-  Call TraceMack_InstDirHasAppFolder
+  Call TraceMark_InstDirHasAppFolder
   Pop $0
-  IntCmp $0 1 traceMack_no_append 0
+  IntCmp $0 1 TraceMark_no_append 0
   StrCpy $INSTDIR "$INSTDIR\${APP_FILENAME}"
-  traceMack_no_append:
+  TraceMark_no_append:
 FunctionEnd
 
 Function .onVerifyInstDir
-  Call TraceMack_EnsureInstSubdir
+  Call TraceMark_EnsureInstSubdir
 FunctionEnd

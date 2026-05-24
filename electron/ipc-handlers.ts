@@ -1,5 +1,6 @@
-import { ipcMain, app, dialog, type BrowserWindow } from 'electron'
+import { ipcMain, app, dialog, shell, type BrowserWindow } from 'electron'
 import { getDb } from './database'
+import { tElectron } from './ui-locale'
 import { listActivityLogs, updateActivityField } from './activity-logs'
 import { reloadProcessWatcherFromSettings } from './process-watcher'
 import { DEFAULT_PROCESS_CATEGORIES, CATEGORY_LABELS } from './window-title-parser'
@@ -25,6 +26,8 @@ import {
   type UpdateProjectSpaceInput,
   type ProjectAliasType
 } from './project-spaces'
+import { searchWorkAssetsRecall } from './asset-search'
+import { buildWeeklyMemoryCapsule } from './weekly-memory-capsule'
 import {
   listWorkAssets,
   getWorkAsset,
@@ -48,13 +51,24 @@ import {
   type RetrospectiveFilter
 } from './retrospectives'
 import { generateWeeklyRetro, generateProjectPhaseRetro } from './retro-generator'
-import { recordLocalMetric, countLocalMetrics } from './local-metrics'
+import {
+  recordLocalMetric,
+  countLocalMetrics,
+  listLocalMetrics,
+  aggregateByDay,
+  aggregateByName,
+  exportMetricsAsJson,
+  type LocalMetricName
+} from './local-metrics'
 import { buildDailyNarrativePlain, generateDailyNarrativeAi } from './daily-narrative'
+import { suggestTodayMainline } from './today-seal'
+import { getDailySeal, upsertDailySeal, type UpsertDailySealInput } from './daily-seal'
 import {
   buildWeeklyRetroUploadPreview,
   buildRetroUploadPreview,
   buildActivityReportUploadPreview,
-  buildDailyNarrativeUploadPreview
+  buildDailyNarrativeUploadPreview,
+  buildSealDailyReportUploadPreview
 } from './upload-preview'
 import {
   getActivityProviderStatus,
@@ -161,7 +175,11 @@ export function registerIpcHandlers(
 
   ipcMain.handle(
     'metrics:record',
-    (_event, name: string, payload?: Record<string, unknown>) => {
+    <N extends LocalMetricName>(
+      _event: unknown,
+      name: N,
+      payload?: import('../shared/local-metrics-types').LocalMetricPayload<N>
+    ) => {
       try {
         recordLocalMetric(name, payload)
         return true
@@ -171,8 +189,37 @@ export function registerIpcHandlers(
     }
   )
 
-  ipcMain.handle('metrics:count', (_event, name?: string | null) =>
+  ipcMain.handle('metrics:count', (_event, name?: LocalMetricName | null) =>
     countLocalMetrics(name ?? undefined)
+  )
+
+  ipcMain.handle('metrics:list', (_event, filter?: import('../shared/local-metrics-types').ListLocalMetricsFilter) =>
+    listLocalMetrics(filter ?? {})
+  )
+
+  ipcMain.handle(
+    'metrics:aggregateByDay',
+    (_event, name: LocalMetricName, from: number, to: number) => aggregateByDay(name, from, to)
+  )
+
+  ipcMain.handle('metrics:aggregateByName', (_event, from: number, to: number) =>
+    aggregateByName(from, to)
+  )
+
+  ipcMain.handle(
+    'metrics:exportJson',
+    (_event, filter?: import('../shared/local-metrics-types').ExportMetricsFilter) =>
+      exportMetricsAsJson(filter ?? {})
+  )
+
+  ipcMain.handle('todaySeal:suggestMainline', (_event, dateMs: number) =>
+    suggestTodayMainline(dateMs)
+  )
+
+  ipcMain.handle('dailySeal:get', (_event, dateMs: number) => getDailySeal(dateMs))
+
+  ipcMain.handle('dailySeal:upsert', (_event, input: UpsertDailySealInput) =>
+    upsertDailySeal(input)
   )
 
   ipcMain.handle('dailyNarrative:get', (_event, dateMs: number) => buildDailyNarrativePlain(dateMs))
@@ -181,6 +228,10 @@ export function registerIpcHandlers(
 
   ipcMain.handle('uploadPreview:dailyNarrative', (_event, dateMs: number) =>
     buildDailyNarrativeUploadPreview(dateMs)
+  )
+
+  ipcMain.handle('uploadPreview:sealDailyReport', (_event, dateMs: number) =>
+    buildSealDailyReportUploadPreview(dateMs)
   )
 
   ipcMain.handle('settings:getDefaultProcessCategories', () => {
@@ -205,7 +256,9 @@ export function registerIpcHandlers(
         kind: 'daily',
         reportId: id,
         mode: result.mode,
-        dateStart: start.getTime()
+        dateStart: start.getTime(),
+        source: result.source ?? 'legacy',
+        reportVersion: result.reportVersion ?? 'v2'
       })
     } catch {
       /* ignore metrics errors */
@@ -226,8 +279,16 @@ export function registerIpcHandlers(
         kind: 'weekly',
         reportId: id,
         mode: result.mode,
-        dateStart: start.getTime()
+        dateStart: start.getTime(),
+        source: result.source ?? 'legacy',
+        reportVersion: result.reportVersion ?? 'v2'
       })
+      if (result.source === 'battle') {
+        recordLocalMetric('weekly_battle_generated', {
+          weekStartMs: start.getTime(),
+          mode: result.mode
+        })
+      }
     } catch {
       /* ignore */
     }
@@ -292,6 +353,16 @@ export function registerIpcHandlers(
 
   ipcMain.handle('workAssets:list', (_event, filter: WorkAssetFilter) => listWorkAssets(filter))
 
+  ipcMain.handle(
+    'workAssets:searchRecall',
+    (_event, query: string, options?: { limit?: number; rerank?: boolean }) =>
+      searchWorkAssetsRecall({
+        query,
+        limit: options?.limit,
+        rerank: options?.rerank
+      })
+  )
+
   ipcMain.handle('workAssets:countByProject', (_event, projectId: number) =>
     countWorkAssetsByProject(projectId)
   )
@@ -305,6 +376,15 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('workAssets:generateSuggested', (_event, dateMs: number, force?: boolean) => {
+    if (force) {
+      try {
+        const start = new Date(dateMs)
+        start.setHours(0, 0, 0, 0)
+        recordLocalMetric('asset_regenerated', { dayStart: start.getTime() })
+      } catch {
+        /* ignore metrics errors */
+      }
+    }
     return scheduleGenerateSuggestedAssets(dateMs, force ?? false, notifyWorkAssetsUpdated)
   })
 
@@ -354,12 +434,32 @@ export function registerIpcHandlers(
 
   ipcMain.handle('workAssets:merge', (_event, ids: number[]) => {
     const result = mergeWorkAssets(ids)
+    if (result) {
+      try {
+        recordLocalMetric('asset_merged', {
+          count: ids.length,
+          resultId: result.id
+        })
+      } catch {
+        /* ignore metrics errors */
+      }
+    }
     if (result?.startedAt) notifyWorkAssetsUpdated(result.startedAt)
     return result
   })
 
   ipcMain.handle('workAssets:split', (_event, id: number, parts: SplitWorkAssetPart[]) => {
     const results = splitWorkAsset(id, parts)
+    if (results.length > 0) {
+      try {
+        recordLocalMetric('asset_split', {
+          id,
+          partsCount: parts.length
+        })
+      } catch {
+        /* ignore metrics errors */
+      }
+    }
     const first = results[0]
     if (first?.startedAt) notifyWorkAssetsUpdated(first.startedAt)
     return results
@@ -403,9 +503,24 @@ export function registerIpcHandlers(
     exportContentToFile(content, defaultName)
   )
 
+  ipcMain.handle(
+    'reports:savePng',
+    async (_event, dataUrl: string, defaultName: string) => savePngDataUrl(dataUrl, defaultName)
+  )
+
+  ipcMain.handle('reports:weeklyMemoryCapsule', async (_event, weekStartMs: number) =>
+    buildWeeklyMemoryCapsule(weekStartMs)
+  )
+
   ipcMain.handle('content:export', async (_event, content: string, defaultName: string) =>
     exportContentToFile(content, defaultName)
   )
+
+  ipcMain.handle('shell:openExternal', (_event, url: string) => {
+    if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) return false
+    void shell.openExternal(url)
+    return true
+  })
 
   ipcMain.handle(
     'dialog:pickDirectory',
@@ -415,7 +530,9 @@ export function registerIpcHandlers(
     ): Promise<string | string[] | null> => {
       const win = getMainWindow?.()
       const dialogOpts = {
-        title: options?.title ?? (options?.multiple ? '选择目录' : '选择文件夹'),
+        title:
+          options?.title ??
+          (options?.multiple ? tElectron('electron.pickDirectory') : tElectron('electron.pickFolder')),
         defaultPath: options?.defaultPath,
         properties: (options?.multiple
           ? ['openDirectory', 'multiSelections']
@@ -501,7 +618,7 @@ async function exportContentToFile(content: string, defaultName: string): Promis
       : [{ name: 'Markdown', extensions: ['md'] }]
 
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
-    title: '导出',
+    title: tElectron('electron.export'),
     defaultPath: defaultName,
     filters
   })
@@ -509,6 +626,23 @@ async function exportContentToFile(content: string, defaultName: string): Promis
   if (canceled || !filePath) return false
 
   writeFileSync(filePath, content, 'utf-8')
+  return true
+}
+
+async function savePngDataUrl(dataUrl: string, defaultName: string): Promise<boolean> {
+  const win = getMainWindow?.()
+  if (!win) return false
+
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: tElectron('electron.exportPng'),
+    defaultPath: defaultName,
+    filters: [{ name: tElectron('electron.pngFilter'), extensions: ['png'] }]
+  })
+
+  if (canceled || !filePath) return false
+
+  const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
+  writeFileSync(filePath, Buffer.from(base64, 'base64'))
   return true
 }
 

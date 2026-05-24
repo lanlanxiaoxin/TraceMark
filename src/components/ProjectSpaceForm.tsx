@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { FolderOpen } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { ChevronDown, ChevronUp, FolderOpen } from 'lucide-react'
 import type { ProjectAliasType, ProjectRoleTemplate, ProjectSpace } from '@/env'
 import { listProjectAliases, replaceProjectAliases } from '@/lib/projectSpaces'
 import { pickDirectory } from '@/lib/dialog'
-import { PrivacyConsentPanel } from '@/components/PrivacyConsentPanel'
 
 interface ProjectSpaceFormProps {
   space?: ProjectSpace | null
@@ -24,6 +24,7 @@ interface ProjectSpaceFormProps {
 }
 
 export function ProjectSpaceForm({ space, onSave, onCancel }: ProjectSpaceFormProps): JSX.Element {
+  const { t } = useTranslation()
   const [name, setName] = useState(space?.name ?? '')
   const [privacyAlias, setPrivacyAlias] = useState(space?.privacyAlias ?? '')
   const [description, setDescription] = useState(space?.description ?? '')
@@ -33,12 +34,12 @@ export function ProjectSpaceForm({ space, onSave, onCancel }: ProjectSpaceFormPr
   const [gitPath, setGitPath] = useState('')
   const [browserKeywords, setBrowserKeywords] = useState('')
   const [documentKeywords, setDocumentKeywords] = useState('')
-  const [documentDirs, setDocumentDirs] = useState('')
   const [meetingKeywords, setMeetingKeywords] = useState('')
   const [chatKeywords, setChatKeywords] = useState('')
   const [nameAliases, setNameAliases] = useState('')
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(!!space)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   useEffect(() => {
     if (!space) {
@@ -50,12 +51,8 @@ export function ProjectSpaceForm({ space, onSave, onCancel }: ProjectSpaceFormPr
       setBrowserKeywords(
         aliases.filter(a => a.aliasType === 'browser').map(a => a.value).join(', ')
       )
-      const docAliases = aliases.filter(a => a.aliasType === 'document')
       setDocumentKeywords(
-        docAliases.filter(a => !looksLikeDirectoryHint(a.value)).map(a => a.value).join(', ')
-      )
-      setDocumentDirs(
-        docAliases.filter(a => looksLikeDirectoryHint(a.value)).map(a => a.value).join(', ')
+        aliases.filter(a => a.aliasType === 'document').map(a => a.value).join(', ')
       )
       setMeetingKeywords(
         aliases.filter(a => a.aliasType === 'meeting').map(a => a.value).join(', ')
@@ -67,24 +64,10 @@ export function ProjectSpaceForm({ space, onSave, onCancel }: ProjectSpaceFormPr
 
   const browseGitPath = async (): Promise<void> => {
     const picked = await pickDirectory({
-      title: '选择 Git 仓库所在文件夹',
+      title: t('projectSpace.pickFolderTitle'),
       defaultPath: gitPath.trim() || undefined
     })
     if (typeof picked === 'string') setGitPath(picked)
-  }
-
-  const browseDocumentDirs = async (): Promise<void> => {
-    const first = splitCommaPaths(documentDirs)[0]
-    const picked = await pickDirectory({
-      title: '选择绑定文档目录（可多选）',
-      defaultPath: first || undefined,
-      multiple: true
-    })
-    if (Array.isArray(picked) && picked.length > 0) {
-      setDocumentDirs(mergeCommaPaths(documentDirs, picked))
-    } else if (typeof picked === 'string') {
-      setDocumentDirs(mergeCommaPaths(documentDirs, [picked]))
-    }
   }
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
@@ -100,7 +83,7 @@ export function ProjectSpaceForm({ space, onSave, onCancel }: ProjectSpaceFormPr
         gitPath: gitPath.trim(),
         browserKeywords: browserKeywords.trim(),
         documentKeywords: documentKeywords.trim(),
-        documentDirs: documentDirs.trim(),
+        documentDirs: '',
         meetingKeywords: meetingKeywords.trim(),
         chatKeywords: chatKeywords.trim(),
         nameAliases: nameAliases.trim()
@@ -111,14 +94,14 @@ export function ProjectSpaceForm({ space, onSave, onCancel }: ProjectSpaceFormPr
   }
 
   if (loading) {
-    return <p className="text-sm text-gray-500 p-4">加载中...</p>
+    return <p className="text-sm text-gray-500 p-4">{t('common.loadingShort')}</p>
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label htmlFor="ps-name" className="block text-sm font-medium text-gray-700 mb-1">
-          项目名称
+          {t('projectSpace.name')}
         </label>
         <input
           id="ps-name"
@@ -130,75 +113,45 @@ export function ProjectSpaceForm({ space, onSave, onCancel }: ProjectSpaceFormPr
       </div>
 
       <div>
-        <label htmlFor="ps-privacy" className="block text-sm font-medium text-gray-700 mb-1">
-          隐私别名（上传 AI 时使用）
-        </label>
-        <input
-          id="ps-privacy"
-          value={privacyAlias}
-          onChange={e => setPrivacyAlias(e.target.value)}
-          placeholder="例如 Project_A"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-        />
-      </div>
-
-      <div>
-        <label htmlFor="ps-role" className="block text-sm font-medium text-gray-700 mb-1">
-          角色模板
-        </label>
-        <select
-          id="ps-role"
-          value={roleTemplate}
-          onChange={e => setRoleTemplate(e.target.value as ProjectRoleTemplate)}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
-        >
-          <option value="developer">程序员</option>
-          <option value="pm">产品经理</option>
-          <option value="implementation">实施工程师</option>
-          <option value="office">泛办公</option>
-        </select>
-      </div>
-
-      <div>
         <label htmlFor="ps-git" className="block text-sm font-medium text-gray-700 mb-1">
-          Git 仓库路径
+          {t('projectSpace.gitPath')}
         </label>
         <div className="flex gap-2">
           <input
             id="ps-git"
             value={gitPath}
             onChange={e => setGitPath(e.target.value)}
-            placeholder="D:\workspace\my-project"
+            placeholder={t('projectSpace.optional')}
             className="flex-1 min-w-0 rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono"
           />
           <button
             type="button"
             onClick={() => void browseGitPath()}
             className="shrink-0 inline-flex items-center gap-1 px-3 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
-            aria-label="浏览选择 Git 仓库文件夹"
+            aria-label={t('projectSpace.browseFolderAria')}
           >
             <FolderOpen className="w-4 h-4" />
-            浏览
+            {t('common.browse')}
           </button>
         </div>
       </div>
 
       <div>
         <label htmlFor="ps-names" className="block text-sm font-medium text-gray-700 mb-1">
-          项目别名（逗号分隔）
+          {t('projectSpace.aliases')}
         </label>
         <input
           id="ps-names"
           value={nameAliases}
           onChange={e => setNameAliases(e.target.value)}
-          placeholder="traceMark, workflow-ai"
+          placeholder={t('projectSpace.aliasesPlaceholder')}
           className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
         />
       </div>
 
       <div>
         <label htmlFor="ps-browser" className="block text-sm font-medium text-gray-700 mb-1">
-          浏览器关键词（逗号分隔）
+          {t('projectSpace.browserKeywords')}
         </label>
         <input
           id="ps-browser"
@@ -208,84 +161,97 @@ export function ProjectSpaceForm({ space, onSave, onCancel }: ProjectSpaceFormPr
         />
       </div>
 
-      <div>
-        <label htmlFor="ps-doc" className="block text-sm font-medium text-gray-700 mb-1">
-          文档关键词（逗号分隔）
-        </label>
-        <input
-          id="ps-doc"
-          value={documentKeywords}
-          onChange={e => setDocumentKeywords(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-        />
-      </div>
+      <button
+        type="button"
+        onClick={() => setShowAdvanced(!showAdvanced)}
+        className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
+        aria-expanded={showAdvanced}
+      >
+        {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        {showAdvanced ? t('projectSpace.advancedToggleHide') : t('projectSpace.advancedToggleShow')}
+      </button>
 
-      <div>
-        <label htmlFor="ps-doc-dir" className="block text-sm font-medium text-gray-700 mb-1">
-          绑定文档目录（L3，逗号分隔绝对路径）
-        </label>
-        <div className="flex gap-2">
-          <input
-            id="ps-doc-dir"
-            value={documentDirs}
-            onChange={e => setDocumentDirs(e.target.value)}
-            placeholder="D:\projects\foo\docs"
-            className="flex-1 min-w-0 rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono"
-          />
-          <button
-            type="button"
-            onClick={() => void browseDocumentDirs()}
-            className="shrink-0 inline-flex items-center gap-1 px-3 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
-            aria-label="浏览选择文档目录"
-          >
-            <FolderOpen className="w-4 h-4" />
-            浏览
-          </button>
+      {showAdvanced && (
+        <div className="space-y-4 pl-1 border-l-2 border-gray-100">
+          <div>
+            <label htmlFor="ps-privacy" className="block text-sm font-medium text-gray-700 mb-1">
+              {t('projectSpace.privacyAlias')}
+            </label>
+            <input
+              id="ps-privacy"
+              value={privacyAlias}
+              onChange={e => setPrivacyAlias(e.target.value)}
+              placeholder={t('projectSpace.privacyAliasPlaceholder')}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="ps-role" className="block text-sm font-medium text-gray-700 mb-1">
+              {t('projectSpace.roleTemplate')}
+            </label>
+            <select
+              id="ps-role"
+              value={roleTemplate}
+              onChange={e => setRoleTemplate(e.target.value as ProjectRoleTemplate)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+            >
+              <option value="developer">{t('projectSpace.roleDeveloper')}</option>
+              <option value="pm">{t('projectSpace.rolePm')}</option>
+              <option value="implementation">{t('projectSpace.roleImplementation')}</option>
+              <option value="office">{t('projectSpace.roleOffice')}</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="ps-doc" className="block text-sm font-medium text-gray-700 mb-1">
+              {t('projectSpace.docKeywords')}
+            </label>
+            <input
+              id="ps-doc"
+              value={documentKeywords}
+              onChange={e => setDocumentKeywords(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="ps-meeting" className="block text-sm font-medium text-gray-700 mb-1">
+              {t('projectSpace.meetingKeywords')}
+            </label>
+            <input
+              id="ps-meeting"
+              value={meetingKeywords}
+              onChange={e => setMeetingKeywords(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="ps-chat" className="block text-sm font-medium text-gray-700 mb-1">
+              {t('projectSpace.chatKeywords')}
+            </label>
+            <input
+              id="ps-chat"
+              value={chatKeywords}
+              onChange={e => setChatKeywords(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="ps-desc" className="block text-sm font-medium text-gray-700 mb-1">
+              {t('projectSpace.description')}
+            </label>
+            <textarea
+              id="ps-desc"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={2}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
         </div>
-        <p className="text-xs text-gray-500 mt-1">
-          可多次浏览追加多个目录；仅在开启该项目 L3 授权后扫描目录片段，不上传全文。
-        </p>
-      </div>
-
-      <div>
-        <label htmlFor="ps-meeting" className="block text-sm font-medium text-gray-700 mb-1">
-          会议关键词（逗号分隔）
-        </label>
-        <input
-          id="ps-meeting"
-          value={meetingKeywords}
-          onChange={e => setMeetingKeywords(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-        />
-      </div>
-
-      <div>
-        <label htmlFor="ps-chat" className="block text-sm font-medium text-gray-700 mb-1">
-          聊天关键词（逗号分隔）
-        </label>
-        <input
-          id="ps-chat"
-          value={chatKeywords}
-          onChange={e => setChatKeywords(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-        />
-      </div>
-
-      <div>
-        <label htmlFor="ps-desc" className="block text-sm font-medium text-gray-700 mb-1">
-          描述
-        </label>
-        <textarea
-          id="ps-desc"
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-          rows={2}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-        />
-      </div>
-
-      {space?.id != null && (
-        <PrivacyConsentPanel scopeType="project" projectId={space.id} compact />
       )}
 
       <div className="flex gap-2 pt-2">
@@ -294,14 +260,14 @@ export function ProjectSpaceForm({ space, onSave, onCancel }: ProjectSpaceFormPr
           disabled={saving}
           className="px-4 py-2 text-sm font-medium rounded-lg bg-gray-900 text-white disabled:opacity-50"
         >
-          {saving ? '保存中...' : '保存'}
+          {saving ? t('common.saving') : t('common.save')}
         </button>
         <button
           type="button"
           onClick={onCancel}
           className="px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-600"
         >
-          取消
+          {t('common.cancel')}
         </button>
       </div>
     </form>
@@ -313,19 +279,6 @@ function splitCommaPaths(raw: string): string[] {
     .split(/[,，]/)
     .map(v => v.trim())
     .filter(Boolean)
-}
-
-function mergeCommaPaths(current: string, add: string[]): string {
-  const merged = [...splitCommaPaths(current)]
-  for (const p of add) {
-    if (!merged.includes(p)) merged.push(p)
-  }
-  return merged.join(', ')
-}
-
-function looksLikeDirectoryHint(value: string): boolean {
-  const v = value.trim()
-  return /^[A-Za-z]:[\\/]/.test(v) || v.startsWith('/') || v.startsWith('\\\\')
 }
 
 export function buildAliasesFromForm(data: {
@@ -345,7 +298,6 @@ export function buildAliasesFromForm(data: {
   for (const v of split(data.nameAliases)) aliases.push({ aliasType: 'name', value: v })
   for (const v of split(data.browserKeywords)) aliases.push({ aliasType: 'browser', value: v })
   for (const v of split(data.documentKeywords)) aliases.push({ aliasType: 'document', value: v })
-  for (const v of split(data.documentDirs)) aliases.push({ aliasType: 'document', value: v })
   for (const v of split(data.meetingKeywords)) aliases.push({ aliasType: 'meeting', value: v })
   for (const v of split(data.chatKeywords)) aliases.push({ aliasType: 'chat', value: v })
   return aliases

@@ -1,4 +1,11 @@
-import { loadPromptFile } from './prompt-path'
+import { loadLocalizedPrompt, reportSystemPrompt } from './report-prompts'
+import { getDailySeal } from './daily-seal'
+import {
+  buildActivitySummaryForPrompt,
+  buildAssetsSectionForPrompt,
+  buildTemplateDailyReportV3,
+  formatSealBlock
+} from './daily-report-v3'
 import { getDb } from './database'
 import { listActivityLogs, type ActivityLogRow } from './activity-logs'
 import { buildAiSafeSummary, type AiSafeActivitySummary } from './sanitizer'
@@ -12,6 +19,12 @@ import {
   loadWeeklyReportPrompt
 } from './weekly-report-builder'
 import { buildWeeklyEvidence } from './report-evidence'
+import {
+  buildActivityGitSectionForBattle,
+  buildTemplateWeeklyBattle,
+  buildWeeklyBattlePrompt,
+  hasWeeklyBattleData
+} from './weekly-battle-v3'
 
 interface ResolvedAiConfig {
   baseUrl: string
@@ -576,9 +589,11 @@ export interface GenerateReportResult {
   mode: 'ai' | 'offline'
   degradedFromAi?: boolean
   degradationReason?: string
+  source?: 'seal' | 'legacy' | 'battle'
+  reportVersion?: 'v3' | 'v2' | 'battle-v3'
 }
 
-export async function generateDailyReport(dateMs: number): Promise<GenerateReportResult> {
+async function generateLegacyDailyReport(dateMs: number): Promise<GenerateReportResult> {
   const start = new Date(dateMs)
   start.setHours(0, 0, 0, 0)
   const end = new Date(dateMs)
@@ -590,7 +605,6 @@ export async function generateDailyReport(dateMs: number): Promise<GenerateRepor
     limit: 500
   })
 
-  // 离线模式用简版 git 汇总
   const projects = [...new Set(items.map(i => i.parsed_project).filter(Boolean))] as string[]
   const gitMapOffline = await collectGitCommitsForProjects(projects, start.getTime())
   const gitSummary = [...gitMapOffline.entries()]
@@ -600,57 +614,150 @@ export async function generateDailyReport(dateMs: number): Promise<GenerateRepor
   const offlineContent = buildOfflineReport('今日工作摘要', items, start.getTime(), gitSummary)
 
   if (shouldUseOfflineReport()) {
-    return { content: offlineContent, mode: 'offline' }
+    return { content: offlineContent, mode: 'offline', source: 'legacy', reportVersion: 'v2' }
   }
 
   const workUnits = await buildWorkUnits(items, start.getTime())
   const workUnitText = workUnits.length > 0
     ? workUnits.map((u, i) => formatWorkUnitForPrompt(u, i + 1)).join('\n\n')
     : '（今日无活动记录）'
-  const template = loadPromptFile('daily-report-v2.md')
+  const template = loadLocalizedPrompt('daily-report-v2.md')
   const prompt = template.replace('{{work_units}}', workUnitText)
 
   try {
-    const raw = await callChatCompletion(
-      prompt,
-      '你是专业的工作汇报助手。输出简洁、可直接阅读的中文 Markdown 日报。禁止开场白，直接从 ## 标题开始。'
-    )
-    return { content: normalizeAiReportContent(raw), mode: 'ai' }
+    const raw = await callChatCompletion(prompt, reportSystemPrompt('dailyLegacy'))
+    return { content: normalizeAiReportContent(raw), mode: 'ai', source: 'legacy', reportVersion: 'v2' }
   } catch (err) {
     return {
       content: offlineContent,
       mode: 'offline',
       degradedFromAi: true,
-      degradationReason: err instanceof Error ? err.message : 'AI 请求失败'
+      degradationReason: err instanceof Error ? err.message : 'AI 请求失败',
+      source: 'legacy',
+      reportVersion: 'v2'
     }
   }
 }
 
-export async function generateWeeklyReport(weekStartMs: number): Promise<GenerateReportResult> {
+async function generateSealDailyReport(dateMs: number): Promise<GenerateReportResult> {
+  const seal = getDailySeal(dateMs)
+  const templateDraft = await buildTemplateDailyReportV3(dateMs)
+
+  if (shouldUseOfflineReport()) {
+    return {
+      content: templateDraft,
+      mode: 'offline',
+      source: 'seal',
+      reportVersion: 'v3'
+    }
+  }
+
+  const promptTemplate = loadLocalizedPrompt('daily-report-v3.md')
+  const prompt = promptTemplate
+    .replace('{{seal_block}}', formatSealBlock(seal))
+    .replace('{{activity_summary}}', buildActivitySummaryForPrompt(dateMs))
+    .replace('{{assets_section}}', buildAssetsSectionForPrompt(dateMs))
+    .replace('{{template_draft}}', templateDraft.slice(0, 6000))
+
+  try {
+    const raw = await callChatCompletion(prompt, reportSystemPrompt('dailySeal'))
+    return {
+      content: normalizeAiReportContent(raw),
+      mode: 'ai',
+      source: 'seal',
+      reportVersion: 'v3'
+    }
+  } catch (err) {
+    return {
+      content: templateDraft,
+      mode: 'offline',
+      degradedFromAi: true,
+      degradationReason: err instanceof Error ? err.message : 'AI 请求失败',
+      source: 'seal',
+      reportVersion: 'v3'
+    }
+  }
+}
+
+export async function generateDailyReport(dateMs: number): Promise<GenerateReportResult> {
+  const seal = getDailySeal(dateMs)
+  if (seal) {
+    return generateSealDailyReport(dateMs)
+  }
+  return generateLegacyDailyReport(dateMs)
+}
+
+async function generateLegacyWeeklyReport(weekStartMs: number): Promise<GenerateReportResult> {
   const ctx = await buildWeeklyContext(weekStartMs)
   const evidence = await buildWeeklyEvidence(weekStartMs)
   const offlineContent = buildOfflineWeeklyReport(ctx, evidence)
 
   if (shouldUseOfflineReport()) {
-    return { content: offlineContent, mode: 'offline' }
+    return { content: offlineContent, mode: 'offline', source: 'legacy', reportVersion: 'v2' }
   }
 
   const prompt = loadWeeklyReportPrompt(ctx.fullPromptText)
 
   try {
-    const raw = await callChatCompletion(
-      prompt,
-      '你是专业的工作汇报助手。输出简洁、可直接阅读的中文 Markdown 周报。禁止开场白，直接从 ## 标题开始。'
-    )
-    return { content: normalizeAiReportContent(raw), mode: 'ai' }
+    const raw = await callChatCompletion(prompt, reportSystemPrompt('weeklyLegacy'))
+    return {
+      content: normalizeAiReportContent(raw),
+      mode: 'ai',
+      source: 'legacy',
+      reportVersion: 'v2'
+    }
   } catch (err) {
     return {
       content: offlineContent,
       mode: 'offline',
       degradedFromAi: true,
-      degradationReason: err instanceof Error ? err.message : 'AI 请求失败'
+      degradationReason: err instanceof Error ? err.message : 'AI 请求失败',
+      source: 'legacy',
+      reportVersion: 'v2'
     }
   }
+}
+
+async function generateWeeklyBattleReport(weekStartMs: number): Promise<GenerateReportResult> {
+  const templateDraft = await buildTemplateWeeklyBattle(weekStartMs)
+  const activityGit = await buildActivityGitSectionForBattle(weekStartMs)
+
+  if (shouldUseOfflineReport()) {
+    return {
+      content: templateDraft,
+      mode: 'offline',
+      source: 'battle',
+      reportVersion: 'battle-v3'
+    }
+  }
+
+  const prompt = buildWeeklyBattlePrompt(weekStartMs, templateDraft, activityGit)
+
+  try {
+    const raw = await callChatCompletion(prompt, reportSystemPrompt('weeklyBattle'))
+    return {
+      content: normalizeAiReportContent(raw),
+      mode: 'ai',
+      source: 'battle',
+      reportVersion: 'battle-v3'
+    }
+  } catch (err) {
+    return {
+      content: templateDraft,
+      mode: 'offline',
+      degradedFromAi: true,
+      degradationReason: err instanceof Error ? err.message : 'AI 请求失败',
+      source: 'battle',
+      reportVersion: 'battle-v3'
+    }
+  }
+}
+
+export async function generateWeeklyReport(weekStartMs: number): Promise<GenerateReportResult> {
+  if (hasWeeklyBattleData(weekStartMs)) {
+    return generateWeeklyBattleReport(weekStartMs)
+  }
+  return generateLegacyWeeklyReport(weekStartMs)
 }
 
 export function saveReport(

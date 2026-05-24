@@ -1,5 +1,19 @@
 /// <reference types="vite/client" />
 
+export type {
+  AppPageMetric,
+  DailyMetricAggregate,
+  ExportMetricsFilter,
+  ListLocalMetricsFilter,
+  LocalMetricName,
+  LocalMetricPayload,
+  LocalMetricPayloadMap,
+  LocalMetricRow,
+  NameMetricAggregate
+} from '../shared/local-metrics-types'
+
+export { DEFAULT_METRICS_EXPORT_LIMIT } from '../shared/local-metrics-types'
+
 export type ActivityCategory =
   | 'code_editor'
   | 'terminal'
@@ -46,6 +60,48 @@ export interface GenerateReportResult {
   mode: 'ai' | 'offline'
   degradedFromAi?: boolean
   degradationReason?: string
+  source?: 'seal' | 'legacy' | 'battle'
+  reportVersion?: 'v3' | 'v2' | 'battle-v3'
+}
+
+export interface AppNavigatePayload {
+  page: 'reports'
+  intent: {
+    type?: 'daily' | 'weekly'
+    dateMs?: number
+    autoGenerate?: boolean
+  }
+}
+
+export interface DailySealRecord {
+  id: number
+  dateMs: number
+  projectId: number | null
+  projectName: string | null
+  parsedProjectLabel: string | null
+  taskHint: string | null
+  note: string
+  skippedMainline: boolean
+  evidenceSuggested: number
+  evidenceArchived: number
+  evidenceDismissed: number
+  completedAt: number
+  createdAt: number
+  updatedAt: number
+}
+
+export interface UpsertDailySealInput {
+  dateMs: number
+  projectId?: number | null
+  projectName?: string | null
+  parsedProjectLabel?: string | null
+  taskHint?: string | null
+  note?: string
+  skippedMainline?: boolean
+  evidenceSuggested?: number
+  evidenceArchived?: number
+  evidenceDismissed?: number
+  completedAt?: number
 }
 
 export interface DailyNarrativeAiResult {
@@ -77,6 +133,15 @@ export type ProjectAliasType = 'name' | 'repo' | 'browser' | 'document' | 'meeti
 export type AssetKind = 'outcome' | 'process' | 'evidence'
 export type AssetStatus = 'suggested' | 'confirmed' | 'ignored' | 'private'
 export type AssetConfidence = 'high' | 'medium' | 'low'
+
+export interface TodayMainlineSuggestion {
+  projectId: number | null
+  projectName: string | null
+  parsedProjectLabel: string | null
+  taskHint: string | null
+  activityMinutes: number
+  confidence: 'high' | 'low'
+}
 
 export interface ProjectSpace {
   id: number
@@ -134,6 +199,54 @@ export interface WorkAssetFilter {
   dateEnd?: number
   limit?: number
   offset?: number
+}
+
+export interface ActivityRecallHit {
+  id: number
+  processName: string
+  category: string | null
+  sanitizedTitle: string | null
+  parsedProject: string | null
+  parsedFile: string | null
+  startedAt: number
+  endedAt: number
+}
+
+export interface RecallSearchResult {
+  items: WorkAsset[]
+  activities: ActivityRecallHit[]
+  parsed: {
+    text: string
+    dateStart?: number
+    dateEnd?: number
+    assetKind?: AssetKind
+  }
+  usedFts: boolean
+  activityUsedFts: boolean
+  reranked: boolean
+}
+
+export interface TimelineIntent {
+  dayTimestamp?: number
+  highlightActivityLogId?: number
+  focusStartedAt?: number
+}
+
+export interface WeeklyMemoryCapsuleSection {
+  title: string
+  items: string[]
+}
+
+export interface WeeklyMemoryCapsulePayload {
+  weekLabel: string
+  weekStartMs: number
+  stats: {
+    assetCount: number
+    sealCount: number
+    outcomeCount: number
+  }
+  statsSubtitle: string
+  sections: WeeklyMemoryCapsuleSection[]
 }
 
 export type RetroType = 'weekly' | 'project_phase'
@@ -248,9 +361,34 @@ interface ElectronAPI {
   getSetting: (key: string) => Promise<string | null>
   setSetting: (key: string, value: string) => Promise<boolean>
   getAppVersion: () => Promise<string>
-  recordMetric: (name: string, payload?: Record<string, unknown>) => Promise<boolean>
-  countMetrics: (name?: string) => Promise<number>
+  openExternalUrl: (url: string) => Promise<boolean>
+  recordMetric: <N extends import('../shared/local-metrics-types').LocalMetricName>(
+    name: N,
+    payload?: import('../shared/local-metrics-types').LocalMetricPayload<N>
+  ) => Promise<boolean>
+  countMetrics: (
+    name?: import('../shared/local-metrics-types').LocalMetricName
+  ) => Promise<number>
+  listMetrics: (
+    filter?: import('../shared/local-metrics-types').ListLocalMetricsFilter
+  ) => Promise<import('../shared/local-metrics-types').LocalMetricRow[]>
+  aggregateMetricsByDay: (
+    name: import('../shared/local-metrics-types').LocalMetricName,
+    from: number,
+    to: number
+  ) => Promise<import('../shared/local-metrics-types').DailyMetricAggregate[]>
+  aggregateMetricsByName: (
+    from: number,
+    to: number
+  ) => Promise<import('../shared/local-metrics-types').NameMetricAggregate[]>
+  exportMetricsJson: (
+    filter?: import('../shared/local-metrics-types').ExportMetricsFilter
+  ) => Promise<string>
+  suggestTodayMainline: (dateMs: number) => Promise<TodayMainlineSuggestion>
+  getDailySeal: (dateMs: number) => Promise<DailySealRecord | null>
+  upsertDailySeal: (input: UpsertDailySealInput) => Promise<DailySealRecord>
   getDailyNarrative: (dateMs: number) => Promise<string>
+  buildSealDailyReportUploadPreview: (dateMs: number) => Promise<UploadPreview>
   buildDailyNarrativeUploadPreview: (dateMs: number) => Promise<UploadPreview>
   generateDailyNarrativeAi: (dateMs: number) => Promise<DailyNarrativeAiResult>
   listActivityLogs: (options: ListActivityLogsOptions) => Promise<ListActivityLogsResult>
@@ -275,6 +413,9 @@ interface ElectronAPI {
     limit?: number
   }) => Promise<StoredReportSummary[]>
   exportMarkdown: (content: string, defaultName: string) => Promise<boolean>
+  saveReportPng: (dataUrl: string, defaultName: string) => Promise<boolean>
+  getWeeklyMemoryCapsule: (weekStartMs: number) => Promise<WeeklyMemoryCapsulePayload>
+  onAppNavigate: (callback: (payload: AppNavigatePayload) => void) => () => void
   pickDirectory: (options?: {
     defaultPath?: string
     title?: string
@@ -301,6 +442,10 @@ interface ElectronAPI {
     alias?: string
   ) => Promise<ProjectAlias>
   listWorkAssets: (filter: WorkAssetFilter) => Promise<WorkAsset[]>
+  searchWorkAssetsRecall: (
+    query: string,
+    options?: { limit?: number; rerank?: boolean; activityLimit?: number }
+  ) => Promise<RecallSearchResult>
   getWorkAsset: (id: number) => Promise<WorkAsset | null>
   updateWorkAsset: (id: number, patch: UpdateWorkAssetPatch) => Promise<WorkAsset | null>
   generateSuggestedAssets: (dateMs: number, force?: boolean) => Promise<GenerateSuggestedResult>

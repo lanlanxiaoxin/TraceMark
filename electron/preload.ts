@@ -24,9 +24,39 @@ const api = {
     ipcRenderer.invoke('settings:set', key, value),
   getAppVersion: (): Promise<string> =>
     ipcRenderer.invoke('app:getVersion'),
-  recordMetric: (name: string, payload?: Record<string, unknown>): Promise<boolean> =>
-    ipcRenderer.invoke('metrics:record', name, payload),
-  countMetrics: (name?: string): Promise<number> => ipcRenderer.invoke('metrics:count', name),
+  openExternalUrl: (url: string): Promise<boolean> =>
+    ipcRenderer.invoke('shell:openExternal', url),
+  recordMetric: <N extends import('../shared/local-metrics-types').LocalMetricName>(
+    name: N,
+    payload?: import('../shared/local-metrics-types').LocalMetricPayload<N>
+  ): Promise<boolean> => ipcRenderer.invoke('metrics:record', name, payload),
+  countMetrics: (
+    name?: import('../shared/local-metrics-types').LocalMetricName
+  ): Promise<number> => ipcRenderer.invoke('metrics:count', name),
+  listMetrics: (
+    filter?: import('../shared/local-metrics-types').ListLocalMetricsFilter
+  ): Promise<import('../shared/local-metrics-types').LocalMetricRow[]> =>
+    ipcRenderer.invoke('metrics:list', filter),
+  aggregateMetricsByDay: (
+    name: import('../shared/local-metrics-types').LocalMetricName,
+    from: number,
+    to: number
+  ): Promise<import('../shared/local-metrics-types').DailyMetricAggregate[]> =>
+    ipcRenderer.invoke('metrics:aggregateByDay', name, from, to),
+  aggregateMetricsByName: (
+    from: number,
+    to: number
+  ): Promise<import('../shared/local-metrics-types').NameMetricAggregate[]> =>
+    ipcRenderer.invoke('metrics:aggregateByName', from, to),
+  exportMetricsJson: (
+    filter?: import('../shared/local-metrics-types').ExportMetricsFilter
+  ): Promise<string> => ipcRenderer.invoke('metrics:exportJson', filter),
+  suggestTodayMainline: (dateMs: number): Promise<unknown> =>
+    ipcRenderer.invoke('todaySeal:suggestMainline', dateMs),
+  getDailySeal: (dateMs: number): Promise<unknown> =>
+    ipcRenderer.invoke('dailySeal:get', dateMs),
+  upsertDailySeal: (input: unknown): Promise<unknown> =>
+    ipcRenderer.invoke('dailySeal:upsert', input),
   getDailyNarrative: (dateMs: number): Promise<string> =>
     ipcRenderer.invoke('dailyNarrative:get', dateMs),
   buildDailyNarrativeUploadPreview: (dateMs: number): Promise<unknown> =>
@@ -69,6 +99,26 @@ const api = {
   }): Promise<unknown> => ipcRenderer.invoke('reports:listInRange', payload),
   exportMarkdown: (content: string, defaultName: string): Promise<boolean> =>
     ipcRenderer.invoke('reports:exportMarkdown', content, defaultName),
+  saveReportPng: (dataUrl: string, defaultName: string): Promise<boolean> =>
+    ipcRenderer.invoke('reports:savePng', dataUrl, defaultName),
+  getWeeklyMemoryCapsule: (weekStartMs: number): Promise<unknown> =>
+    ipcRenderer.invoke('reports:weeklyMemoryCapsule', weekStartMs),
+  onAppNavigate: (
+    callback: (payload: {
+      page: 'reports'
+      intent: { type?: 'daily' | 'weekly'; dateMs?: number; autoGenerate?: boolean }
+    }) => void
+  ): (() => void) => {
+    const handler = (
+      _event: unknown,
+      payload: {
+        page: 'reports'
+        intent: { type?: 'daily' | 'weekly'; dateMs?: number; autoGenerate?: boolean }
+      }
+    ): void => callback(payload)
+    ipcRenderer.on('app:navigate', handler)
+    return () => ipcRenderer.removeListener('app:navigate', handler)
+  },
   getDefaultProcessCategories: (): Promise<{
     mapping: Record<string, string[]>
     labels: Record<string, string>
@@ -96,6 +146,10 @@ const api = {
 
   listWorkAssets: (filter: unknown): Promise<unknown> =>
     ipcRenderer.invoke('workAssets:list', filter),
+  searchWorkAssetsRecall: (
+    query: string,
+    options?: { limit?: number; rerank?: boolean; activityLimit?: number }
+  ): Promise<unknown> => ipcRenderer.invoke('workAssets:searchRecall', query, options),
   getWorkAsset: (id: number): Promise<unknown> =>
     ipcRenderer.invoke('workAssets:get', id),
   updateWorkAsset: (id: number, patch: unknown): Promise<unknown> =>
@@ -127,6 +181,8 @@ const api = {
     dateEnd: number
   ): Promise<unknown> =>
     ipcRenderer.invoke('uploadPreview:retroPhase', projectId, dateStart, dateEnd),
+  buildSealDailyReportUploadPreview: (dateMs: number): Promise<unknown> =>
+    ipcRenderer.invoke('uploadPreview:sealDailyReport', dateMs),
   buildActivityReportPreview: (dateStart: number, dateEnd: number): Promise<unknown> =>
     ipcRenderer.invoke('uploadPreview:activityReport', dateStart, dateEnd),
   countWorkAssetsByProject: (projectId: number): Promise<number> =>
