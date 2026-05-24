@@ -136,3 +136,28 @@ export function listActivityLogs(options: ListActivityLogsOptions = {}): {
 
   return { items, total: totalRow.cnt }
 }
+
+/** 与时间窗有交集的活动记录（升序），用于周报等跨日汇总。 */
+export function listActivityLogsOverlapping(
+  startTime: number,
+  endTime: number,
+  limit = 5000
+): { items: ActivityLogRow[]; total: number } {
+  const db = getDb()
+  const conditions = ['is_deleted = 0', 'started_at < ?', 'ended_at > ?']
+  const params: number[] = [endTime, startTime]
+
+  const where = conditions.join(' AND ')
+  const totalRow = db
+    .prepare(`SELECT COUNT(*) as cnt FROM activity_logs WHERE ${where}`)
+    .get(...params) as { cnt: number }
+
+  const items = db
+    .prepare(
+      `SELECT * FROM activity_logs WHERE ${where}
+       ORDER BY started_at ASC LIMIT ?`
+    )
+    .all(...params, limit) as ActivityLogRow[]
+
+  return { items, total: totalRow.cnt }
+}
