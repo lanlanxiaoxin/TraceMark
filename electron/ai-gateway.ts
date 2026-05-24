@@ -6,6 +6,12 @@ import { CATEGORY_LABELS, type ActivityCategory } from './window-title-parser'
 import { collectGitCommitsForProjects, loadAllGitDiffSnapshots, cleanupExpiredDiffSnapshots } from './enrichment/git-enrichment'
 import { canUseCloudAi } from './privacy-capabilities'
 import { normalizeAiReportContent } from './report-content'
+import {
+  buildOfflineWeeklyReport,
+  buildWeeklyContext,
+  loadWeeklyReportPrompt
+} from './weekly-report-builder'
+import { buildWeeklyEvidence } from './report-evidence'
 
 interface ResolvedAiConfig {
   baseUrl: string
@@ -621,41 +627,15 @@ export async function generateDailyReport(dateMs: number): Promise<GenerateRepor
 }
 
 export async function generateWeeklyReport(weekStartMs: number): Promise<GenerateReportResult> {
-  const start = new Date(weekStartMs)
-  start.setHours(0, 0, 0, 0)
-  const end = new Date(weekStartMs)
-  end.setDate(end.getDate() + 6)
-  end.setHours(23, 59, 59, 999)
-
-  const { items } = listActivityLogs({
-    startTime: start.getTime(),
-    endTime: end.getTime(),
-    limit: 2000
-  })
-
-  // 离线模式用简版 git 汇总
-  const projects = [...new Set(items.map(i => i.parsed_project).filter(Boolean))] as string[]
-  const gitMapOffline = await collectGitCommitsForProjects(projects, start.getTime())
-  const gitSummary = [...gitMapOffline.entries()]
-    .flatMap(([proj, commits]) =>
-      commits.map(c => `- [${proj}] \`${c.message}\``)
-    )
-    .join('\n')
-
-  const offlineContent = buildOfflineReport('本周工作摘要', items, start.getTime(), gitSummary)
+  const ctx = await buildWeeklyContext(weekStartMs)
+  const evidence = await buildWeeklyEvidence(weekStartMs)
+  const offlineContent = buildOfflineWeeklyReport(ctx, evidence)
 
   if (shouldUseOfflineReport()) {
     return { content: offlineContent, mode: 'offline' }
   }
 
-  const workUnits = await buildWorkUnits(items, start.getTime())
-  const workUnitText = workUnits.length > 0
-    ? workUnits.map((u, i) => formatWorkUnitForPrompt(u, i + 1)).join('\n\n')
-    : '（本周无活动记录）'
-  const template = loadPromptFile('weekly-report-v2.md')
-  const prompt = template
-    .replace('{{work_units}}', workUnitText)
-    .replace('{{git_summary}}', gitSummary || '（无 Git 记录）')
+  const prompt = loadWeeklyReportPrompt(ctx.fullPromptText)
 
   try {
     const raw = await callChatCompletion(

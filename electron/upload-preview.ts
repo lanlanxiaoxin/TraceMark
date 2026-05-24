@@ -9,6 +9,7 @@ import { listActivityLogs } from './activity-logs'
 import { CATEGORY_LABELS, type ActivityCategory } from './window-title-parser'
 import { dayBounds } from './work-asset-generator'
 import { buildDailyNarrativePlain, buildDailyNarrativePromptPayload } from './daily-narrative'
+import { buildWeeklyContextPreviewSummary } from './weekly-report-builder'
 
 export interface UploadPreviewLine {
   kind: 'info' | 'warning' | 'blocked'
@@ -271,6 +272,25 @@ export async function buildActivityReportUploadPreview(
   const gate = checkCloudAiGate()
   if (isOfflineMode() || !hasApiKey() || !canUseCloudAi()) {
     return gate
+  }
+
+  const spanMs = dateEnd - dateStart
+  const isWeeklyRange = spanMs > 36 * 60 * 60 * 1000
+
+  if (isWeeklyRange) {
+    const weekStart = weekBoundsFromStart(dateStart).start
+    const preview = await buildWeeklyContextPreviewSummary(weekStart)
+    return {
+      title: '活动报告 — 上传预览（周报）',
+      lines: [
+        ...gate.lines,
+        { kind: 'info', text: preview.coverageLine },
+        { kind: 'info', text: '将发送 7 日摘要 + 整周统计/Git 证据（非原始 work unit 平铺）。' }
+      ],
+      payloadSummary: preview.payloadSummary || '（无内容）',
+      canProceed: true,
+      requiresConsent: false
+    }
   }
 
   const { items } = listActivityLogs({
